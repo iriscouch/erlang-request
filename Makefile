@@ -3,6 +3,9 @@ ERLC	     ?= erlc
 
 .PHONY: deps doc
 
+%.beam: %.erl
+	erlc -o test/ $<
+
 all: deps compile
 
 compile:
@@ -11,9 +14,11 @@ compile:
 deps:
 	@./rebar get-deps
 
-test: all
-	@$(ERLC) -o t/ t/etap.erl
-	prove t/*.t
+check: test/etap.beam test/util.beam
+	@prove test/*.t
+
+check_verbose: test/etap.beam test/util.beam
+	@prove -v test/*.t
 
 clean:
 	@./rebar clean

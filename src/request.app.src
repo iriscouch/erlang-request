@@ -1,11 +1,9 @@
-{ application, couchbeam,
+{ application, request,
  [ {description, "Erlang Request"}
  , {vsn, "0.1.0"}
- , {modules, []}
- , {registered, [
-                ]},
-  {applications, [kernel, stdlib, crypto, public_key, ssl, sasl, inets]},
-  {env, []},
-  {mod, { request_app, []}}
+ , {modules, [request]}
+ , {registered, []}
+ , {applications, [kernel, stdlib, crypto, public_key, ssl, sasl, inets]}
+ , {env, []}
  ]
 }.
