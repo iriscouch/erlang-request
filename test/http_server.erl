@@ -36,7 +36,6 @@ reply(Sock, Version, Body) -> ok
         , Body
         ]
 
-    , io:format("Response:\n~p\n", [Response])
     , gen_tcp:send(Sock, Response)
     .
 
@@ -106,7 +105,8 @@ chown(Socket, Pid) -> ok
     , Pid ! got_permission
     .
 
-to_atom(X) when is_list(X) -> erlang:list_to_existing_atom(X);
+%to_atom(X) when is_list(X) -> erlang:list_to_existing_atom(X);
+to_atom(X) when is_list(X) -> erlang:list_to_atom(X);
 to_atom(X) when is_binary(X) -> to_atom(binary_to_list(X));
 to_atom(X) when is_atom(X) -> X.
 

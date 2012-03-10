@@ -55,6 +55,7 @@ req({Options}) when is_list(Options) -> ok
         of undefined -> ok
             , throw({bad_arg, "Missing url or uri option"})
         ; _ -> ok
+            , io:format("Going: ~p\n", [Url])
             , case httpc:request(Url)
                 of {error, Reason} -> ok
                     , {error, Reason}
