@@ -14,10 +14,10 @@ compile: deps
 deps:
 	@./rebar get-deps
 
-check: compile test/etap.beam test/util.beam
+check: compile test/etap.beam test/util.beam test/http_server.beam
 	@prove test/*.t
 
-check_verbose: test/etap.beam test/util.beam
+check_verbose: test/etap.beam test/util.beam test/http_server.beam
 	@prove -v test/*.t
 
 clean:
