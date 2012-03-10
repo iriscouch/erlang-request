@@ -6,9 +6,9 @@ ERLC	     ?= erlc
 %.beam: %.erl
 	erlc -o test/ $<
 
-all: deps compile
+all: compile
 
-compile:
+compile: deps
 	@./rebar compile
 
 deps:
