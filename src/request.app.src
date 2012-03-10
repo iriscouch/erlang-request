@@ -1,9 +1,8 @@
 { application, request,
  [ {description, "Erlang Request"}
  , {vsn, "0.1.0"}
- , {modules, [request]}
  , {registered, []}
- , {applications, [kernel, stdlib, crypto, public_key, ssl, sasl, inets]}
+ , {applications, [kernel, stdlib, ssl, inets]}
  , {env, []}
  ]
 }.
