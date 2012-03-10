@@ -64,36 +64,68 @@ req({Options}) when is_list(Options) -> ok
         end
     .
 
-get(Options) -> ok
-    , req(oset(Options, method, 'GET'))
+get(Url) when is_list(Url) -> ok
+    , ?MODULE:get({[{url,Url}]})
+    ;
+
+get({Options}) -> ok
+    , req(oset({Options}, method, 'GET'))
     .
 
-put(Options) -> ok
-    , req(oset(Options, method, 'PUT'))
+put(Url) when is_list(Url) -> ok
+    , ?MODULE:put({[{url, Url}]})
+    ;
+
+put({Options}) -> ok
+    , req(oset({Options}, method, 'PUT'))
     .
 
-post(Options) -> ok
-    , req(oset(Options, method, 'POST'))
+post(Url) when is_list(Url) -> ok
+    , ?MODULE:post({[{url, Url}]})
+    ;
+
+post({Options}) -> ok
+    , req(oset({Options}, method, 'POST'))
     .
 
-delete(Options) -> ok
-    , req(oset(Options, method, 'DELETE'))
+delete(Url) when is_list(Url) -> ok
+    , ?MODULE:delete({[{url, Url}]})
+    ;
+
+delete({Options}) -> ok
+    , req(oset({Options}, method, 'DELETE'))
     .
 
-get(Options, Callback) -> ok
-    , req(oset(Options, method, 'GET'), Callback)
+get(Url, Callback) when is_list(Url) -> ok
+    , ?MODULE:get({[{url, Url}]}, Callback)
+    ;
+
+get({Options}, Callback) -> ok
+    , req(oset({Options}, method, 'GET'), Callback)
     .
 
-put(Options, Callback) -> ok
-    , req(oset(Options, method, 'PUT'), Callback)
+put(Url, Callback) when is_list(Url) -> ok
+    , ?MODULE:put({[{url, Url}]}, Callback)
+    ;
+
+put({Options}, Callback) -> ok
+    , req(oset({Options}, method, 'PUT'), Callback)
     .
 
-post(Options, Callback) -> ok
-    , req(oset(Options, method, 'POST'), Callback)
+post(Url, Callback) when is_list(Url) -> ok
+    , ?MODULE:post({[{url, Url}]}, Callback)
+    ;
+
+post({Options}, Callback) -> ok
+    , req(oset({Options}, method, 'POST'), Callback)
     .
 
-delete(Options, Callback) -> ok
-    , req(oset(Options, method, 'DELETE'), Callback)
+delete(Url, Callback) when is_list(Url) -> ok
+    , ?MODULE:delete({[{url, Url}]}, Callback)
+    ;
+
+delete({Options}, Callback) -> ok
+    , req(oset({Options}, method, 'DELETE'), Callback)
     .
 
 
@@ -118,7 +150,8 @@ odel(Obj, Key) -> ok
     .
 
 oset({Obj}, Key, Value) -> ok
-    , oset(Obj, Key, Value)
+    , Result = oset(Obj, Key, Value)
+    , {Result}
     ;
 
 oset(Obj, Key, undefined) -> ok
