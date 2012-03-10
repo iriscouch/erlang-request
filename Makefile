@@ -14,7 +14,7 @@ compile:
 deps:
 	@./rebar get-deps
 
-check: test/etap.beam test/util.beam
+check: compile test/etap.beam test/util.beam
 	@prove test/*.t
 
 check_verbose: test/etap.beam test/util.beam
