@@ -7,11 +7,12 @@
 main([]) -> ok
     , code:add_pathz("test")
     , code:add_pathz("ebin")
+    , code:add_pathz("deps/ejson/ebin")
 
     , request:start()
     , http_server:echo(?PORT)
 
-    , etap:plan(19)
+    , etap:plan(40)
     , test()
     , etap:end_tests()
     .
@@ -19,13 +20,15 @@ main([]) -> ok
 test() -> ok
     , test_methods()
     , test_response()
+    , test_json()
+    , test_syntax()
     .
 
 test_methods() -> ok
     , Functions = [req, get, put, post, delete]
     , lists:foreach(fun(Func) -> ok
         , Url = ?HOST ++ "/" ++ atom_to_list(Func)
-        , {Res, Body} = request:Func(Url)
+        , {Res, _Body} = request:Func(Url)
         , etap:isnt(Res, error, "Request using request:" ++ atom_to_list(Func))
         end, Functions)
 
@@ -59,6 +62,37 @@ test_response() -> ok
     , etap:is(Body, Res:body(), "res.body and body are the same thing")
     .
 
+test_json() -> ok
+    , {Res1, Body1} = request:get({[{uri, ?HOST ++ "/json"}, {json,true}]})
+    , etap:isnt(Res1, error, "No error with json:true")
+    , etap:ok(is_tuple(Body1), "Response with json:true is an ejson tuple")
+    , etap:is(Res1:body(), Body1, "res.body == body for json:true")
+    .
+
+test_syntax() -> ok
+    , Methods = [get, put, post, delete]
+    , lists:foreach(fun(Method) -> ok
+        , Meth_s = atom_to_list(Method)
+        , Path = "/syntax/" ++ Meth_s
+        , Sent_method = string:to_upper(Meth_s)
+        , Url = ?HOST ++ Path
+
+        , {Res, Body} = request:Method({[{uri,Url}, {json,true}]})
+        , etap:isnt(Res, error, "No problem " ++ Sent_method ++ " " ++ Url)
+
+        , etap:is(dot(Body, ".method"), list_to_binary(Sent_method), "Server saw method: " ++ Sent_method)
+        , etap:is(dot(Body, ".path")  , list_to_binary(Path), "Server saw the path: " ++ Path)
+
+        , etap:is(dot(Body, ".headers.Accept"), <<"application/json">>, "Sent accept:application/json header")
+        , case Method =:= put orelse Method =:= post
+            of false -> ok
+            ; true -> ok
+                , Sent_type = dot(Body, ".headers.Content-Type")
+                , etap:is(Sent_type, <<"application/json">>, "Sent content-type:application/json for " ++ Meth_s)
+            end
+        end, Methods)
+    .
+
 handler(Method) -> ok
     , Waiter_pid = self()
     , Waiter = fun(Handler_pid) -> ok
@@ -73,5 +107,8 @@ handler(Method) -> ok
         end
     , {Waiter, Handler}
     .
+
+dot(Obj, Key) -> request:dot(Obj, Key).
+dot(Obj, Key, Val) -> request:dot(Obj, Key, Val).
 
 % vim: sts=4 sw=4 et

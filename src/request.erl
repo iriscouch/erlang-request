@@ -12,11 +12,12 @@
 
 -module(request).
 -export([start/0, start/1, api/0, api/1]).
+
 -export([req/1, get/1, put/1, post/1, delete/1]).
 -export([req/2, get/2, put/2, post/2, delete/2]).
 
 -export([new_response/1]).
--export([normal_key/1]).
+-export([dot/2, dot/3, normal_key/1]).
 
 start() -> ok
     , ssl:start()
@@ -59,37 +60,51 @@ req(Url) when is_list(Url) -> ok
     , req({[{url, Url}]})
     ;
 
-req({Options}) when is_list(Options) -> ok
-    , Uri = oget(Options, uri)
-    , Url = oget(Options, url, Uri)
+req({Obj}=Options) when is_list(Obj) -> ok
+    , Uri = dot(Options, uri)
+    , Url = dot(Options, {url, Uri})
+    , Is_json = dot(Options, {".json", false}) =/= false
+
     , case Url
         of undefined -> ok
             , throw({bad_arg, "Missing url or uri option"})
         ; _ -> ok
-            , Method = list_to_existing_atom(normal_key(oget(Options, method, get)))
-            , Headers = []
+            , Method = list_to_existing_atom(normal_key(dot(Options, {method, get})))
+            , Headers = case Is_json
+                of true -> [{"accept","application/json"}]
+                ; false -> []
+                end
             , HTTPOptions = []
             , Req_options = []
             %, Profile = httpc:default_profile()
             , Req = case Method
-                of _ when Method =:= put orelse Method =:= post -> ok
-                    , ContentType = ""
-                    , Body = ""
-                    , {Url, Headers, ContentType, Body}
-                ; _ -> ok
-                    , {Url, Headers}
+                of put -> {Url, Headers, "application/json", ""}
+                ; post -> {Url, Headers, "application/json", ""}
+                ; _    -> {Url, Headers}
                 end
 
             %, io:format("httpc:request(~p, ~p, ~p, ~p).\n", [Method, Req, Req_options, HTTPOptions])
             , try httpc:request(Method, Req, Req_options, HTTPOptions)
                 of {error, Reason} -> ok
                     , {error, Reason}
-                ; {ok, Result} -> ok
-                    , Response = new_response(Result)
-                    , {Response, Response:body()}
+                ; {ok, {Res_head, Res_headers, Res_body}=Res} -> ok
+                    , case Is_json
+                        of false -> ok
+                            % No JSON decoding.
+                            , Response = new_response(Res)
+                            , {Response, Response:body()}
+                        ;  _ -> ok
+                            % Decode the JSON.
+                            , try ejson:decode(Res_body)
+                                of Eobj -> ok
+                                    , Response = new_response({Res_head, Res_headers, Eobj})
+                                    , {Response, Response:body()}
+                                catch E_type:E_err -> ok
+                                    , {error, {E_type, E_err}}
+                                end
+                        end
                 catch A:B -> ok
-                    , io:format("httpc error: ~p:~p\n", [A, B])
-                    , exit({A, B})
+                    , {error, {A, B}}
                 end
         end
     .
@@ -100,7 +115,7 @@ get(Url) when is_list(Url) -> ok
     ;
 
 get({Options}) -> ok
-    , req(oset({Options}, method, 'get'))
+    , req(dot({Options}, method, 'get'))
     .
 
 put(Url) when is_list(Url) -> ok
@@ -108,7 +123,7 @@ put(Url) when is_list(Url) -> ok
     ;
 
 put({Options}) -> ok
-    , req(oset({Options}, method, 'put'))
+    , req(dot({Options}, method, 'put'))
     .
 
 post(Url) when is_list(Url) -> ok
@@ -116,7 +131,7 @@ post(Url) when is_list(Url) -> ok
     ;
 
 post({Options}) -> ok
-    , req(oset({Options}, method, 'post'))
+    , req(dot({Options}, method, 'post'))
     .
 
 delete(Url) when is_list(Url) -> ok
@@ -124,7 +139,7 @@ delete(Url) when is_list(Url) -> ok
     ;
 
 delete({Options}) -> ok
-    , req(oset({Options}, method, 'delete'))
+    , req(dot({Options}, method, 'delete'))
     .
 
 get(Url, Callback) when is_list(Url) -> ok
@@ -132,7 +147,7 @@ get(Url, Callback) when is_list(Url) -> ok
     ;
 
 get({Options}, Callback) -> ok
-    , req(oset({Options}, method, 'get'), Callback)
+    , req(dot({Options}, method, 'get'), Callback)
     .
 
 put(Url, Callback) when is_list(Url) -> ok
@@ -140,7 +155,7 @@ put(Url, Callback) when is_list(Url) -> ok
     ;
 
 put({Options}, Callback) -> ok
-    , req(oset({Options}, method, 'put'), Callback)
+    , req(dot({Options}, method, 'put'), Callback)
     .
 
 post(Url, Callback) when is_list(Url) -> ok
@@ -148,7 +163,7 @@ post(Url, Callback) when is_list(Url) -> ok
     ;
 
 post({Options}, Callback) -> ok
-    , req(oset({Options}, method, 'post'), Callback)
+    , req(dot({Options}, method, 'post'), Callback)
     .
 
 delete(Url, Callback) when is_list(Url) -> ok
@@ -156,7 +171,7 @@ delete(Url, Callback) when is_list(Url) -> ok
     ;
 
 delete({Options}, Callback) -> ok
-    , req(oset({Options}, method, 'delete'), Callback)
+    , req(dot({Options}, method, 'delete'), Callback)
     .
 
 
@@ -169,49 +184,8 @@ waiter(Options, Callback) -> ok
 % Utilities
 %
 
-as_binary(B) when is_binary(B) ->
-    B;
-as_binary(A) when is_atom(A) ->
-    list_to_binary(atom_to_list(A));
-as_binary(L) when is_list(L) ->
-    list_to_binary(L).
-
-odel(Obj, Key) -> ok
-    , oset(Obj, Key, undefined)
-    .
-
-oset({Obj}, Key, Value) -> ok
-    , Result = oset(Obj, Key, Value)
-    , {Result}
-    ;
-
-oset(Obj, Key, undefined) -> ok
-    , lists:keydelete(Key, 1, Obj)
-    ;
-
-oset(Obj, Key, Value) -> ok
-    , lists:keystore(Key, 1, Obj, {Key, Value})
-    .
-
-oget(Obj, Key) -> ok
-    , oget(Obj, Key, undefined)
-    .
-
-oget({Obj}, Key, Default) -> ok
-    , oget(Obj, Key, Default)
-    ;
-
-oget(Obj, Key, Default) when is_list(Obj) -> ok
-    , case lists:keyfind(Key, 1, Obj)
-        of {Key, Value} -> ok
-            , Value
-        ; false -> ok
-            , case is_atom(Key)
-                of true -> oget(Obj, as_binary(Key), Default)
-                ; false -> Default
-                end
-        end
-    .
+dot(Obj, Key) -> request_dot:dot(Obj, Key).
+dot(Obj, Key, Val) -> request_dot:dot(Obj, Key, Val).
 
 normal_headers(Headers) -> ok
     , Normalized = normal_headers(Headers, [])
