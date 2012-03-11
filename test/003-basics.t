@@ -3,7 +3,6 @@
 -define(TIMEOUT, 3000).
 -define(PORT, 12345).
 -define(HOST, "http://localhost:12345").
-%-define(HOST, "http://localhost:5984").
 
 main([]) -> ok
     , code:add_pathz("test")
@@ -12,7 +11,7 @@ main([]) -> ok
     , request:start()
     , http_server:echo(?PORT)
 
-    , etap:plan(5)
+    , etap:plan(10)
     , test()
     , etap:end_tests()
     .
@@ -24,9 +23,37 @@ test() -> ok
 test_methods() -> ok
     , Functions = [req, get, put, post, delete]
     , lists:foreach(fun(Func) -> ok
-        , {Res, Body} = request:Func(?HOST)
+        , Url = ?HOST ++ "/" ++ atom_to_list(Func)
+        , {Res, Body} = request:Func(Url)
         , etap:isnt(Res, error, "Request using request:" ++ atom_to_list(Func))
         end, Functions)
+
+    , Request = request:api(async)
+    , lists:foreach(fun(Func) -> ok
+        , {Waiter, Handler} = handler(atom_to_list(Func))
+        , Url = ?HOST ++ "/async/" ++ atom_to_list(Func)
+        , Opts = case Func
+            of req -> Url
+            ; _ -> {[{method,Func}, {uri,Url}]}
+            end
+        , Pid = Request(Opts, Handler)
+        , Waiter(Pid)
+        end, Functions)
+    .
+
+handler(Method) -> ok
+    , Waiter_pid = self()
+    , Waiter = fun(Handler_pid) -> ok
+        , receive
+            {Handler_pid, ok} -> ok
+            after ?TIMEOUT    -> throw(timeout)
+            end
+        end
+    , Handler = fun(Type, _Result) -> ok
+        , etap:isnt(Type, error, "Async handler: " ++ Method)
+        , Waiter_pid ! {self(), ok}
+        end
+    , {Waiter, Handler}
     .
 
 % vim: sts=4 sw=4 et

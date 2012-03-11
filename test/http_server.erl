@@ -81,6 +81,7 @@ reply(Sock, Version, Headers0, Body) -> ok
         , Body_bin
         ]
 
+    %, io:format("~s\n", [iolist_to_binary(Response)])
     , gen_tcp:send(Sock, Response)
     , gen_tcp:close(Sock)
     .

@@ -80,7 +80,7 @@ req({Options}) when is_list(Options) -> ok
                     , {Url, Headers}
                 end
 
-            %, io:format("=== httpc:request(~p, ~p, ~p, ~p).\n", [Method, Req, Req_options, HTTPOptions])
+            %, io:format("httpc:request(~p, ~p, ~p, ~p).\n", [Method, Req, Req_options, HTTPOptions])
             , try httpc:request(Method, Req, Req_options, HTTPOptions)
                 of {error, Reason} -> ok
                     , {error, Reason}
