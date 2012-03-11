@@ -40,15 +40,33 @@ echo(Port) -> ok
             of {1,1} -> "1.1"
             ;  {1,0} -> "1.0"
             end
+
         , Info =
             [ {"method" , Method}
             , {"path"   , Path}
             , {"version", Ver}
             ]
+
+        , Req_body = case Method
+            of _ when Method =/= 'PUT' andalso Method =/= 'POST' -> ok
+                , "null"
+            ; _ -> ok
+                , case lists:keyfind('Content-Length', 1, Headers)
+                    of false -> ok
+                        , "null"
+                    ; {'Content-Length', Len_b} -> ok
+                        , Len = list_to_integer(Len_b)
+                        , inet:setopts(Sock, [binary, {packet,raw}, {active,false}])
+                        , {ok, Read} = gen_tcp:recv(Sock, Len)
+                        , Read
+                    end
+            end
+
         , Body =
             [ "{"
             , string:join([ KV(Key, Val) || {Key, Val} <- Info ], ",")
             , ",\"headers\":{", Headers_enc, "}"
+            , ",\"body\":", Req_body
             , "}"
             ]
         , reply(Sock, Version, Resp_headers, Body)

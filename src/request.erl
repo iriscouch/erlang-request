@@ -63,7 +63,24 @@ req(Url) when is_list(Url) -> ok
 req({Obj}=Options) when is_list(Obj) -> ok
     , Uri = dot(Options, uri)
     , Url = dot(Options, {url, Uri})
-    , Is_json = dot(Options, {".json", false}) =/= false
+    , Body_val = dot(Options, {".body", <<"">>})
+    , {Is_json, Body} = case dot(Options, {".json", false})
+        of false -> ok
+            , {false, Body_val}
+        ; true -> ok
+            % Encode the .body value.
+            , case Body_val
+                of <<"">> -> ok
+                    , {true, <<"">>}
+                ;  _  -> ok
+                    , Encoded_body = ejson:encode(Body_val)
+                    , {true, Encoded_body}
+                end
+        ; Json_val -> ok
+            % Encode the .json value.
+            , Encoded_body = ejson:encode(Json_val)
+            , {true, Encoded_body}
+        end
 
     , case Url
         of undefined -> ok
@@ -78,9 +95,19 @@ req({Obj}=Options) when is_list(Obj) -> ok
             , Req_options = []
             %, Profile = httpc:default_profile()
             , Req = case Method
-                of put -> {Url, Headers, "application/json", ""}
-                ; post -> {Url, Headers, "application/json", ""}
-                ; _    -> {Url, Headers}
+                of _ when Method =/= put andalso Method =/= post -> ok
+                    , {Url, Headers}
+                ; _ -> ok
+                    , Content_type = case Is_json
+                        of true -> "application/json"
+                        ; false -> ""
+                        end
+                    , Content_length = case Body
+                        of undefined -> "0"
+                        ; _          -> integer_to_list(size(Body))
+                        end
+                    , Headers1 = Headers ++ [{"content-length", Content_length}]
+                    , {Url, Headers1, Content_type, Body}
                 end
 
             %, io:format("httpc:request(~p, ~p, ~p, ~p).\n", [Method, Req, Req_options, HTTPOptions])

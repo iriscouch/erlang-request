@@ -12,7 +12,7 @@ main([]) -> ok
     , request:start()
     , http_server:echo(?PORT)
 
-    , etap:plan(40)
+    , etap:plan(46)
     , test()
     , etap:end_tests()
     .
@@ -28,8 +28,9 @@ test_methods() -> ok
     , Functions = [req, get, put, post, delete]
     , lists:foreach(fun(Func) -> ok
         , Url = ?HOST ++ "/" ++ atom_to_list(Func)
-        , {Res, _Body} = request:Func(Url)
+        , {Res, Body} = request:Func(Url)
         , etap:isnt(Res, error, "Request using request:" ++ atom_to_list(Func))
+        , io:format("---> ~p\n", [Body])
         end, Functions)
 
     , Request = request:api(async)
@@ -91,6 +92,19 @@ test_syntax() -> ok
                 , etap:is(Sent_type, <<"application/json">>, "Sent content-type:application/json for " ++ Meth_s)
             end
         end, Methods)
+
+    , Store_methods = [put, post]
+    , lists:foreach(fun(Method) -> ok
+        , Meth_s = atom_to_list(Method)
+        , Meth_b = list_to_binary(Meth_s)
+        , Req_body = {[{<<"json_shortcut">>,true}, {<<"method">>,Meth_b}]}
+        , {Res, Body} = request:Method({[{uri, ?HOST}, {json, Req_body}]})
+        , etap:isnt(Res, error, "No problem with json shortcut: " ++ Meth_s)
+
+        , Roundtrip_body = dot(Body, ".body")
+        , etap:is(dot(Roundtrip_body, ".method"), Meth_b, "Server sent back method: " ++ Meth_s)
+        , etap:ok(Req_body =:= Roundtrip_body, "Body round-tripped through request/response: " ++ Meth_s)
+        end, Store_methods)
     .
 
 handler(Method) -> ok
