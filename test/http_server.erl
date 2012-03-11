@@ -70,7 +70,8 @@ reply(Sock, Version, Headers0, Body) -> ok
 
     , Body_bin = iolist_to_binary(Body)
     , Length = size(Body_bin)
-    , Headers = lists:keystore("Content-Length", 1, Headers0, {"Content-Length", integer_to_list(Length)})
+    , Headers1 = lists:keystore("Content-Length", 1, Headers0, {"Content-Length", integer_to_list(Length)})
+    , Headers = lists:keystore("Connection", 1, Headers1, {"Connection", "close"})
 
     , Response =
         [ ResponseVersion, " ", integer_to_list(StatusCode), " ", StatusMessage
@@ -81,6 +82,7 @@ reply(Sock, Version, Headers0, Body) -> ok
         ]
 
     , gen_tcp:send(Sock, Response)
+    , gen_tcp:close(Sock)
     .
 
 listen(Port, Handler) -> ok

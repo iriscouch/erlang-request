@@ -66,22 +66,40 @@ req({Options}) when is_list(Options) -> ok
         of undefined -> ok
             , throw({bad_arg, "Missing url or uri option"})
         ; _ -> ok
-            , io:format("Going: ~p\n", [Url])
-            , case httpc:request(Url)
+            , Method = list_to_existing_atom(normal_key(oget(Options, method, get)))
+            , Headers = []
+            , HTTPOptions = []
+            , Req_options = []
+            %, Profile = httpc:default_profile()
+            , Req = case Method
+                of _ when Method =:= put orelse Method =:= post -> ok
+                    , ContentType = ""
+                    , Body = ""
+                    , {Url, Headers, ContentType, Body}
+                ; _ -> ok
+                    , {Url, Headers}
+                end
+
+            %, io:format("=== httpc:request(~p, ~p, ~p, ~p).\n", [Method, Req, Req_options, HTTPOptions])
+            , try httpc:request(Method, Req, Req_options, HTTPOptions)
                 of {error, Reason} -> ok
                     , {error, Reason}
                 ; {ok, Result} -> ok
                     , {Result, <<"I am the body">>}
+                catch A:B -> ok
+                    , io:format("httpc error: ~p:~p\n", [A, B])
+                    , exit({A, B})
                 end
         end
     .
+
 
 get(Url) when is_list(Url) -> ok
     , ?MODULE:get({[{url,Url}]})
     ;
 
 get({Options}) -> ok
-    , req(oset({Options}, method, 'GET'))
+    , req(oset({Options}, method, 'get'))
     .
 
 put(Url) when is_list(Url) -> ok
@@ -89,7 +107,7 @@ put(Url) when is_list(Url) -> ok
     ;
 
 put({Options}) -> ok
-    , req(oset({Options}, method, 'PUT'))
+    , req(oset({Options}, method, 'put'))
     .
 
 post(Url) when is_list(Url) -> ok
@@ -97,7 +115,7 @@ post(Url) when is_list(Url) -> ok
     ;
 
 post({Options}) -> ok
-    , req(oset({Options}, method, 'POST'))
+    , req(oset({Options}, method, 'post'))
     .
 
 delete(Url) when is_list(Url) -> ok
@@ -105,7 +123,7 @@ delete(Url) when is_list(Url) -> ok
     ;
 
 delete({Options}) -> ok
-    , req(oset({Options}, method, 'DELETE'))
+    , req(oset({Options}, method, 'delete'))
     .
 
 get(Url, Callback) when is_list(Url) -> ok
@@ -113,7 +131,7 @@ get(Url, Callback) when is_list(Url) -> ok
     ;
 
 get({Options}, Callback) -> ok
-    , req(oset({Options}, method, 'GET'), Callback)
+    , req(oset({Options}, method, 'get'), Callback)
     .
 
 put(Url, Callback) when is_list(Url) -> ok
@@ -121,7 +139,7 @@ put(Url, Callback) when is_list(Url) -> ok
     ;
 
 put({Options}, Callback) -> ok
-    , req(oset({Options}, method, 'PUT'), Callback)
+    , req(oset({Options}, method, 'put'), Callback)
     .
 
 post(Url, Callback) when is_list(Url) -> ok
@@ -129,7 +147,7 @@ post(Url, Callback) when is_list(Url) -> ok
     ;
 
 post({Options}, Callback) -> ok
-    , req(oset({Options}, method, 'POST'), Callback)
+    , req(oset({Options}, method, 'post'), Callback)
     .
 
 delete(Url, Callback) when is_list(Url) -> ok
@@ -137,7 +155,7 @@ delete(Url, Callback) when is_list(Url) -> ok
     ;
 
 delete({Options}, Callback) -> ok
-    , req(oset({Options}, method, 'DELETE'), Callback)
+    , req(oset({Options}, method, 'delete'), Callback)
     .
 
 
