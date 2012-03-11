@@ -85,7 +85,8 @@ req({Options}) when is_list(Options) -> ok
                 of {error, Reason} -> ok
                     , {error, Reason}
                 ; {ok, Result} -> ok
-                    , {Result, <<"I am the body">>}
+                    , Response = new_response(Result)
+                    , {Response, Response:body()}
                 catch A:B -> ok
                     , io:format("httpc error: ~p:~p\n", [A, B])
                     , exit({A, B})
