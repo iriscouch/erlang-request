@@ -1,4 +1,4 @@
-# Erlang Request: The easiest Erlang HTTP library you'll ever see
+# Request: The easiest Erlang HTTP library you'll ever see
 
 Erlang Request is a port of Mikeal Rogers's ubiquitous and excellent [request][req] package to Erlang.
 
