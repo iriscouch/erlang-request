@@ -15,6 +15,9 @@
 -export([req/1, get/1, put/1, post/1, delete/1]).
 -export([req/2, get/2, put/2, post/2, delete/2]).
 
+-export([new_response/1]).
+-export([normal_key/1]).
+
 start() -> ok
     , ssl:start()
     , inets:start()
@@ -33,6 +36,14 @@ api() -> ok
 api(async) -> ok
     , start()
     , fun ?MODULE:req/2
+    .
+
+new_response({{Version_str, Status, Message}, Headers, Body}) -> ok
+    , Version = case Version_str
+        of "HTTP/" ++ Rest -> Rest
+        ; _                -> undefined
+        end
+    , request_response:new(Version, Status, Message, normal_headers(Headers), Body)
     .
 
 req(Url, Callback) when is_list(Url) -> ok
@@ -182,5 +193,29 @@ oget(Obj, Key, Default) when is_list(Obj) -> ok
                 end
         end
     .
+
+normal_headers(Headers) -> ok
+    , Normalized = normal_headers(Headers, [])
+    , {Normalized}
+    .
+
+normal_headers([], Normalized) -> ok
+    , Normalized
+    ;
+
+normal_headers([{Key, Val} | Rest], Normalized) -> ok
+    , Normal_key = normal_key(Key)
+    , NewNormal = lists:keystore(Normal_key, 1, Normalized, {Normal_key, to_list(Val)})
+    , normal_headers(Rest, NewNormal)
+    .
+
+normal_key(Key) -> ok
+    , string:to_lower(to_list(Key))
+    .
+
+to_list(X) when is_binary(X) -> binary_to_list(X);
+to_list(X) when is_number(X) -> integer_to_list(X);
+to_list(X) when is_atom(X)   -> atom_to_list(X);
+to_list(X) when is_list(X)   -> X.
 
 % vim: sts=4 sw=4 et

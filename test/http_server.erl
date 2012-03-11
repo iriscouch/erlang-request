@@ -8,7 +8,7 @@
 
 noop(Port) -> ok
     , Noop = fun(Sock, _Method, _Path, Version, _Headers) -> ok
-        , reply(Sock, Version, "")
+        , reply(Sock, Version, "Hi!")
         end
     , listen(Port, Noop)
     .
