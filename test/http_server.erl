@@ -2,7 +2,7 @@
 
 -module(http_server).
 
--export([noop/1]).
+-export([noop/1, echo/1]).
 
 -define(TIMEOUT, 3000).
 
@@ -13,11 +13,54 @@ noop(Port) -> ok
     , listen(Port, Noop)
     .
 
-reply(Sock, Version, Body) when is_list(Body) -> ok
-    , reply(Sock, Version, list_to_binary(Body))
-    ;
+echo(Port) -> ok
+    , KV = fun(Key, Val) -> ok
+        , Pair =
+            [ $"
+            , case Key
+                of _ when is_atom(Key) -> atom_to_list(Key)
+                ; _                    -> Key
+                end
+            , $"
+            , $:
+            , case Val
+              of _ when is_list(Val) -> [ $", Val, $" ]
+              ;  _ when is_atom(Val) -> [ $", atom_to_list(Val), $" ]
+              ;  _ when is_binary(Val) -> [ $", Val, $" ]
+              ;  _ when is_number(Val) -> integer_to_list(Val)
+              end
+            ]
+        , binary_to_list(iolist_to_binary(Pair))
+        end
+
+    , Echo = fun(Sock, Method, {abs_path, Path}, Version, Headers) -> ok
+        , Headers_enc = string:join([ KV(Key, Val) || {Key, Val} <- Headers ], ",")
+        , Resp_headers = [{"Content-Type","application/json"}]
+        , Ver = case Version
+            of {1,1} -> "1.1"
+            ;  {1,0} -> "1.0"
+            end
+        , Info =
+            [ {"method" , Method}
+            , {"path"   , Path}
+            , {"version", Ver}
+            ]
+        , Body =
+            [ "{"
+            , string:join([ KV(Key, Val) || {Key, Val} <- Info ], ",")
+            , ",\"headers\":{", Headers_enc, "}"
+            , "}"
+            ]
+        , reply(Sock, Version, Resp_headers, Body)
+        end
+    , listen(Port, Echo)
+    .
 
 reply(Sock, Version, Body) -> ok
+    , reply(Sock, Version, [], Body)
+    .
+
+reply(Sock, Version, Headers0, Body) -> ok
     , StatusCode = 200
     , StatusMessage = "OK"
     , ResponseVersion = case Version
@@ -25,15 +68,16 @@ reply(Sock, Version, Body) -> ok
         ; _      -> "HTTP/1.0"
         end
 
-    , Length = size(Body)
-    , Headers = [["Content-Length: ", integer_to_list(Length)]]
+    , Body_bin = iolist_to_binary(Body)
+    , Length = size(Body_bin)
+    , Headers = lists:keystore("Content-Length", 1, Headers0, {"Content-Length", integer_to_list(Length)})
 
     , Response =
         [ ResponseVersion, " ", integer_to_list(StatusCode), " ", StatusMessage
         , "\r\n"
-        , [ [X, "\r\n"] || X <- Headers ]
+        , [ [Key, ": ", Val, "\r\n"] || {Key, Val} <- Headers ]
         , "\r\n"
-        , Body
+        , Body_bin
         ]
 
     , gen_tcp:send(Sock, Response)
