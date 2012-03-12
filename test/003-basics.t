@@ -10,7 +10,7 @@ main([]) -> ok
     , code:add_pathz("deps/ejson/ebin")
 
     , request:start()
-    , http_server:echo(?PORT)
+    , http_server:run(echo, ?PORT)
 
     , etap:plan(46)
     , test()

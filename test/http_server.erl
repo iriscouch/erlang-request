@@ -2,57 +2,54 @@
 
 -module(http_server).
 
--export([noop/1, echo/1]).
+-export([run/2]).
 
 -define(TIMEOUT, 3000).
 
-noop(Port) -> ok
-    , Noop = fun(Sock, _Method, _Path, Version, _Headers) -> ok
-        , reply(Sock, Version, "Hi!")
-        end
-    , listen(Port, Noop)
+run(noop, Port) -> listen(Port, fun noop/5);
+run(echo, Port) -> listen(Port, fun echo/5).
+
+noop(Sock, _Method, _Path, Version, _Headers) -> ok
+    , reply(Sock, Version, "Hi!")
     .
 
-echo(Port) -> ok
-    , Echo = fun(Sock, Method, {abs_path, Path}, Version, Headers) -> ok
-        , Headers_enc = string:join([ kv(Key, Val) || {Key, Val} <- Headers ], ",")
-        , Resp_headers = [{"Content-Type","application/json"}]
-        , Ver = case Version
-            of {1,1} -> "1.1"
-            ;  {1,0} -> "1.0"
-            end
-
-        , Info =
-            [ {"method" , Method}
-            , {"path"   , Path}
-            , {"version", Ver}
-            ]
-
-        , Req_body = case Method
-            of _ when Method =/= 'PUT' andalso Method =/= 'POST' -> ok
-                , "null"
-            ; _ -> ok
-                , case lists:keyfind('Content-Length', 1, Headers)
-                    of false -> ok
-                        , "null"
-                    ; {'Content-Length', Len_b} -> ok
-                        , Len = list_to_integer(Len_b)
-                        , inet:setopts(Sock, [binary, {packet,raw}, {active,false}])
-                        , {ok, Read} = gen_tcp:recv(Sock, Len)
-                        , Read
-                    end
-            end
-
-        , Body =
-            [ "{"
-            , string:join([ kv(Key, Val) || {Key, Val} <- Info ], ",")
-            , ",\"headers\":{", Headers_enc, "}"
-            , ",\"body\":", Req_body
-            , "}"
-            ]
-        , reply(Sock, Version, Resp_headers, Body)
+echo(Sock, Method, {abs_path, Path}, Version, Headers) -> ok
+    , Headers_enc = string:join([ kv(Key, Val) || {Key, Val} <- Headers ], ",")
+    , Resp_headers = [{"Content-Type","application/json"}]
+    , Ver = case Version
+        of {1,1} -> "1.1"
+        ;  {1,0} -> "1.0"
         end
-    , listen(Port, Echo)
+
+    , Info =
+        [ {"method" , Method}
+        , {"path"   , Path}
+        , {"version", Ver}
+        ]
+
+    , Req_body = case Method
+        of _ when Method =/= 'PUT' andalso Method =/= 'POST' -> ok
+            , "null"
+        ; _ -> ok
+            , case lists:keyfind('Content-Length', 1, Headers)
+                of false -> ok
+                    , "null"
+                ; {'Content-Length', Len_b} -> ok
+                    , Len = list_to_integer(Len_b)
+                    , inet:setopts(Sock, [binary, {packet,raw}, {active,false}])
+                    , {ok, Read} = gen_tcp:recv(Sock, Len)
+                    , Read
+                end
+        end
+
+    , Body =
+        [ "{"
+        , string:join([ kv(Key, Val) || {Key, Val} <- Info ], ",")
+        , ",\"headers\":{", Headers_enc, "}"
+        , ",\"body\":", Req_body
+        , "}"
+        ]
+    , reply(Sock, Version, Resp_headers, Body)
     .
 
 reply(Sock, Version, Body) -> ok
