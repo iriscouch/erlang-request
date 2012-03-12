@@ -4,7 +4,7 @@ main([]) -> ok
     , code:add_pathz("test")
     , code:add_pathz("ebin")
 
-    , etap:plan(10)
+    , etap:plan(11)
     , test()
     , etap:end_tests()
     .
@@ -15,16 +15,16 @@ test() -> ok
     .
 
 test_creation() -> ok
-    , Res = request:new_response(httpc())
+    , Res = request:new_response(socket, {"1.1", 201, "Created"}, [], "")
     , etap:ok(is_tuple(Res), "Built a response module (tuple)")
     , etap:is(element(1, Res), request_response, "Got a request_response module")
     .
 
 test_values() -> ok
     , {Hdrs, Body} = json("{\"ok\":true}")
-    , Httpc = httpc(200, Hdrs, Body)
-    , Res = request:new_response(Httpc)
+    , Res = request:new_response(a_socket, {"1.1", 200, "OK"}, Hdrs, Body)
 
+    , etap:is(Res:socket(), a_socket, "Response.socket")
     , etap:is(Res:httpVersion(), "1.1", "Response httpVersion is right")
     , etap:is(Res:statusCode(), 200, "Response statusCode is right")
     , etap:is(Res:message(), "OK", "Response message is right")
@@ -37,27 +37,6 @@ test_values() -> ok
     , etap:is(Res:headers("X-Wasnt-there"), undefined, "Missing response header -> undefined")
 
     , etap:is(Res:body(), "{\"ok\":true}", "Response body is right")
-    .
-
-httpc() -> ok
-    , httpc("Hello, world")
-    .
-
-httpc(Body) -> ok
-    , httpc(200, Body)
-    .
-
-httpc(Status, Body) -> ok
-    , httpc(Status, [], Body)
-    .
-
-httpc(Status, Headers, Body) -> ok
-    , httpc("HTTP/1.1", Status, Headers, Body)
-    .
-
-httpc(Version, Status, Headers, Body) -> ok
-    , Head = {Version, Status, "OK"}
-    , {Head, Headers, Body}
     .
 
 json(Body) -> ok

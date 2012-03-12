@@ -16,7 +16,7 @@
 -export([req/1, get/1, put/1, post/1, delete/1]).
 -export([req/2, get/2, put/2, post/2, delete/2]).
 
--export([new_response/1]).
+-export([new_response/4]).
 -export([dot/2, dot/3, normal_key/1]).
 
 start() -> ok
@@ -39,26 +39,23 @@ api(async) -> ok
     , fun ?MODULE:req/2
     .
 
-new_response(Headers) when is_list(Headers) -> ok
-    % Just fake the reply line since it is unknown.
-    , {Version, Status, Reason} = {"1.1", 200, "OK"}
-    , new_response({{Version, Status, Reason}, Headers, undefined})
-    ;
-
-new_response({{Version_str, Status, Message}, Headers, Body}) -> ok
+new_response(Socket, {Version_str, Status, Message}, Headers, Body) -> ok
     , Version = case Version_str
         of "HTTP/" ++ Rest -> Rest
         ; {1,1}            -> "1.1"
         ; {1,0}            -> "1.0"
         ;  _               -> to_list(Version_str)
         end
-    , request_response:new(Version, Status, Message, normal_headers(Headers), Body)
+    , request_response:new(Socket, Version, Status, Message, normal_headers(Headers), Body)
     .
 
 new_response(Response, New_data) -> ok
-    , {Version, Status, Reason} = {Response:httpVersion(), Response:statusCode(), Response:message()}
+    , Socket  = Response:socket()
+    , Version = Response:httpVersion()
+    , Status  = Response:statusCode()
+    , Reason  = Response:message()
     , {Headers} = Response:headers()
-    , new_response({{Version, Status, Reason}, Headers, New_data})
+    , new_response(Socket, {Version, Status, Reason}, Headers, New_data)
     .
 
 req(Url) when is_list(Url) -> ok
@@ -106,7 +103,8 @@ req(Url, Callback) when is_list(Url) -> ok
     , req({[{url,Url}]}, Callback)
     ;
 
-req({_Opts}=Options, Callback) when is_list(_Opts) andalso is_function(Callback) -> ok
+req({_Opts}=Options0, Callback) when is_list(_Opts) andalso is_function(Callback) -> ok
+    , Options = dot(Options0, ".parent_pid", self())
     , Pid = spawn(fun() -> req(child, Options, Callback) end)
     , Pid
     .
@@ -170,23 +168,28 @@ req(child, Options, Callback) -> ok
                     end
                 ])
 
-            , Response_callback = case dot(Options, ".onResponse")
-                of true -> Callback
-                ;  _    -> response_callback(Callback)
-                end
-
             , HTTPOptions = []
             , try execute(HTTPOptions, Method, Parsed_url, Headers, Body)
-                of {Type, Val} -> ok
-                    , Response_callback(Type, Val)
+                of {error, Error} -> ok
+                    , Callback(error, Error)
+                ; {Res, Get_body} -> ok
+                    , case dot(Options, ".onResponse")
+                        of true -> ok
+                            % The original caller will probably want to receive more data.
+                            , chown(Res:socket(), dot(Options, {parent_pid, self()}))
+                            , Callback(Res, Get_body)
+                        ; _ -> ok
+                            , Wrapped = response_callback(Callback)
+                            , Wrapped(Res, Get_body)
+                        end
                 catch A:B -> ok
-                    , Response_callback(error, {A,B})
+                    , Callback(error, {A,B})
                 end
         end
     .
 
 execute(_HTTPOptions, Method, Uri, Headers, Body) -> ok
-    , {Protocol, _Creds, Host, Port, Path, Query} = Uri
+    , {_Protocol, _Creds, Host, Port, Path, Query} = Uri
     , Method_ok = list_to_binary(string:to_upper(to_list(Method)))
     , Headers_ok = [ [Key, ": ", Val, "\r\n"] || {Key, Val} <- Headers ]
 
@@ -227,8 +230,11 @@ recv_headers(Sock, Headers0) -> ok
 
                     % Done. Return the response and body receiver.
                     , inet:setopts(Sock, [binary, {packet,0}, {active,false}])
-                    , Response = new_response({{Version, Code, Reason}, Response_headers, undefined})
-                    , Body_handler = fun() -> get_body(Sock) end
+                    , Response = new_response(Sock, {Version, Code, Reason}, Response_headers, undefined)
+                    , Body_handler = case Response:headers("transfer-encoding")
+                        of "chunked" -> fun() -> get_chunk(Sock) end
+                        ;  _         -> fun() -> get_body(Sock) end
+                        end
                     , {Response, Body_handler}
                 end
         ; Msg -> ok
@@ -251,6 +257,48 @@ get_body(Sock) -> ok
             , {error, {unknown_message, Msg}}
         after 1000 -> ok
             , {error, data_timeout}
+        end
+    .
+
+get_chunk(Sock) -> ok
+    , Body = case erlang:get(pending_data)
+        of undefined -> get_body(Sock)
+        ;  Pending   -> Pending
+        end
+
+    , case Body
+        of {error, Error} -> ok
+            , {error, Error}
+        ; Not_bin when not is_binary(Not_bin) -> ok
+            , {error, {bad_chunk, Not_bin}}
+        ; Chunk -> ok
+            , case break_chunk(Chunk)
+                of {0, <<"">>} -> ok
+                    , 'end'
+                ; {Length, Data} when is_integer(Length) andalso is_binary(Data) -> ok
+                    , Data
+                ; _ -> ok
+                    , {error, {bad_chunk, Chunk}}
+                end
+        end
+    .
+
+break_chunk(Chunk) when is_binary(Chunk) -> ok
+    , case re:run(Chunk, "^([0-9A-Fa-f]+)\r\n")
+        of nomatch -> ok
+            , nomatch
+        ; {match, [{0, Start_at}, Size_slice]} -> ok
+            , Len_b = binary:part(Chunk, Size_slice)
+            , Len = list_to_integer(binary_to_list(Len_b), 16)
+            , Data = binary:part(Chunk, {Start_at, Len})
+
+            , End_pos = Start_at + Len + 2 % Two characters for \r\n
+            , case binary:part(Chunk, {End_pos, size(Chunk) - End_pos})
+                of <<"">> -> erlang:erase(pending_data)
+                ; Remaining -> erlang:put(pending_data, Remaining)
+                end
+
+            , {Len, Data}
         end
     .
 
@@ -281,6 +329,8 @@ collect_response(Res, Get_data, Current_data) -> ok
         ; 'end' -> ok
             , Response = new_response(Res, Current_data)
             , {Response, Response:body()}
+        ; Else -> ok
+            , Else
         end
     .
 
@@ -352,6 +402,10 @@ delete({Options}, Callback) -> ok
 %
 % Utilities
 %
+
+chown(Socket, Pid) -> ok
+    , gen_tcp:controlling_process(Socket, Pid)
+    .
 
 dot(Obj, Key) -> request_dot:dot(Obj, Key).
 dot(Obj, Key, Val) -> request_dot:dot(Obj, Key, Val).

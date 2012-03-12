@@ -66,11 +66,16 @@ stream(Sock, Method, {abs_path, Path}, _Version, _Headers) -> ok
         , Data = iolist_to_binary(Iol)
         , Len = size(Data)
         , timer:sleep(100)
-        , gen_tcp:send(Sock,
+        , Outgoing =
             [ io_lib:format("~.16B\r\n", [Len])
             , Data
             , "\r\n"
-            ])
+            ]
+        , case gen_tcp:send(Sock, Outgoing)
+            of ok -> ok
+            ; Not_ok -> ok
+                , io:format("Error sending to ~p: ~p\n", [Sock, Not_ok])
+            end
         end
 
     , Chunk([atom_to_list(Method), "\r\n"])

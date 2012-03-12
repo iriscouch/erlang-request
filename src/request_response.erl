@@ -10,11 +10,13 @@
 % License for the specific language governing permissions and limitations under
 % the License.
 
--module(request_response, [Version, Status, Message, Headers, Body]).
+-module(request_response, [Socket, Version, Status, Message, Headers, Body]).
 -author('Jason Smith <jhs@iriscouch.com>').
 
--export([httpVersion/0, statusCode/0, message/0, body/0]).
+-export([socket/0, httpVersion/0, statusCode/0, message/0, body/0]).
 -export([headers/0, headers/1]).
+
+socket() -> Socket.
 
 httpVersion() -> Version.
 
