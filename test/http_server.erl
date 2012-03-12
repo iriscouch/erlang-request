@@ -14,27 +14,8 @@ noop(Port) -> ok
     .
 
 echo(Port) -> ok
-    , KV = fun(Key, Val) -> ok
-        , Pair =
-            [ $"
-            , case Key
-                of _ when is_atom(Key) -> atom_to_list(Key)
-                ; _                    -> Key
-                end
-            , $"
-            , $:
-            , case Val
-              of _ when is_list(Val) -> [ $", Val, $" ]
-              ;  _ when is_atom(Val) -> [ $", atom_to_list(Val), $" ]
-              ;  _ when is_binary(Val) -> [ $", Val, $" ]
-              ;  _ when is_number(Val) -> integer_to_list(Val)
-              end
-            ]
-        , binary_to_list(iolist_to_binary(Pair))
-        end
-
     , Echo = fun(Sock, Method, {abs_path, Path}, Version, Headers) -> ok
-        , Headers_enc = string:join([ KV(Key, Val) || {Key, Val} <- Headers ], ",")
+        , Headers_enc = string:join([ kv(Key, Val) || {Key, Val} <- Headers ], ",")
         , Resp_headers = [{"Content-Type","application/json"}]
         , Ver = case Version
             of {1,1} -> "1.1"
@@ -64,7 +45,7 @@ echo(Port) -> ok
 
         , Body =
             [ "{"
-            , string:join([ KV(Key, Val) || {Key, Val} <- Info ], ",")
+            , string:join([ kv(Key, Val) || {Key, Val} <- Info ], ",")
             , ",\"headers\":{", Headers_enc, "}"
             , ",\"body\":", Req_body
             , "}"
@@ -174,5 +155,24 @@ chown(Socket, Pid) -> ok
 to_atom(X) when is_list(X) -> erlang:list_to_atom(X);
 to_atom(X) when is_binary(X) -> to_atom(binary_to_list(X));
 to_atom(X) when is_atom(X) -> X.
+
+% Return "foo":"bar" pairs
+kv(Key, Val) -> ok
+    , binary_to_list(iolist_to_binary(
+        [ $"
+        , case Key
+            of _ when is_atom(Key) -> atom_to_list(Key)
+            ; _                    -> Key
+            end
+        , $"
+        , $:
+        , case Val
+          of _ when is_list(Val) -> [ $", Val, $" ]
+          ;  _ when is_atom(Val) -> [ $", atom_to_list(Val), $" ]
+          ;  _ when is_binary(Val) -> [ $", Val, $" ]
+          ;  _ when is_number(Val) -> integer_to_list(Val)
+          end
+        ]))
+    .
 
 % vim: sts=4 sw=4 et
