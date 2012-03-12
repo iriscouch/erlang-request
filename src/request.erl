@@ -48,6 +48,8 @@ new_response(Headers) when is_list(Headers) -> ok
 new_response({{Version_str, Status, Message}, Headers, Body}) -> ok
     , Version = case Version_str
         of "HTTP/" ++ Rest -> Rest
+        ; {1,1}            -> "1.1"
+        ; {1,0}            -> "1.0"
         ;  _               -> to_list(Version_str)
         end
     , request_response:new(Version, Status, Message, normal_headers(Headers), Body)
@@ -135,26 +137,38 @@ req(child, Options, Callback) -> ok
         of undefined -> ok
             , throw({bad_arg, "Missing url or uri option"})
         ; _ -> ok
-            , Method = list_to_existing_atom(normal_key(dot(Options, {method, get})))
-            , Headers = case Is_json
-                of true -> [{"accept","application/json"}]
-                ; false -> []
+            , Method = dot(Options, {method, get})
+
+            , {ok, Parsed_url} = http_uri:parse(Url)
+            , {Proto, _Creds, Hostname, Port, _Path, _Query} = Parsed_url
+            , Host = case {Proto, Port}
+                of {http, 80} -> Hostname
+                ; {https, 443} -> Hostname
+                ; _            -> Hostname ++ ":" ++ integer_to_list(Port)
                 end
-            , Req = case Method
-                of _ when Method =/= put andalso Method =/= post -> ok
-                    , {Url, Headers}
-                ; _ -> ok
-                    , Content_type = case Is_json
-                        of true -> "application/json"
-                        ; false -> ""
-                        end
-                    , Content_length = case Body
-                        of undefined -> "0"
-                        ; _          -> integer_to_list(size(Body))
-                        end
-                    , Headers1 = Headers ++ [{"content-length", Content_length}]
-                    , {Url, Headers1, Content_type, Body}
-                end
+
+            , Headers = lists:flatten(
+                [ {"Host",Host}
+                , {"Connection","close"}
+                , case Is_json
+                    of true -> [{"Accept","application/json"}]
+                    ; false -> []
+                    end
+                , case Method =:= put orelse Method =:= post
+                    of false -> []
+                    ; true -> ok
+                        , Content_type = case Is_json
+                            of true -> [{"Content-Type","application/json"}]
+                            ; false -> []
+                            end
+                        , Content_length = case Body
+                            of undefined -> []
+                            ;  <<"">>    -> []
+                            ;  _         -> [{"Content-Length", integer_to_list(size(Body))}]
+                            end
+                        , [Content_type, Content_length]
+                    end
+                ])
 
             , Response_callback = case dot(Options, ".onResponse")
                 of true -> Callback
@@ -162,42 +176,79 @@ req(child, Options, Callback) -> ok
                 end
 
             , HTTPOptions = []
-            , Req_options = [{sync,false}, {stream,self}, {full_result,true} ]
-            , execute([Method, Req, HTTPOptions, Req_options], Response_callback)
+            , try execute(HTTPOptions, Method, Parsed_url, Headers, Body)
+                of {Type, Val} -> ok
+                    , Response_callback(Type, Val)
+                catch A:B -> ok
+                    , Response_callback(error, {A,B})
+                end
         end
     .
 
-execute(Params, Callback) -> ok
-    , try apply(httpc, request, Params)
-        of {error, Reason} -> ok
-            , Callback(error, Reason)
-        ; {ok, Req_id} -> ok
-            , head(Req_id, Callback)
-        catch A:B -> ok
-            , Callback(error, {A, B})
+execute(_HTTPOptions, Method, Uri, Headers, Body) -> ok
+    , {Protocol, _Creds, Host, Port, Path, Query} = Uri
+    , Method_ok = list_to_binary(string:to_upper(to_list(Method)))
+    , Headers_ok = [ [Key, ": ", Val, "\r\n"] || {Key, Val} <- Headers ]
+
+    , case gen_tcp:connect(Host, Port, [binary, {packet,0}, {active,false}])
+        of {error, Error} -> ok
+            %, Callback(error, Error)
+            , {error, Error}
+        ; {ok, Sock} -> ok
+            , ok = gen_tcp:send(Sock,
+                [ Method_ok, " ", Path, Query, " ", "HTTP/1.1"
+                , "\r\n"
+                , Headers_ok
+                , "\r\n"
+                , Body
+                ])
+            , inet:setopts(Sock, [binary, {packet,http}, {active,false}])
+            , recv_headers(Sock, [])
         end
     .
 
-head(Req, Callback) -> ok
+recv_headers(Sock, Headers0) -> ok
+    , inet:setopts(Sock, [{active,once}])
     , receive
-        {http, {Req, stream_start, Headers}} -> ok
-            , io:format("HEAD ~p\n", [Headers])
-            , Response = new_response(Headers)
-            , Body_handler = fun() -> get_body(Req) end
-            , Callback(Response, Body_handler)
-        ;E -> ok
-            , io:format("Else ~p\n", [E])
-        after 1000 -> ok
-            , {error, headers_timeout}
+        {_Type, Sock, {http_response, Version, Code, Reason}} -> ok
+            , Headers = [ {http_response, Version, Code, Reason} | Headers0 ]
+            , recv_headers(Sock, Headers)
+        ; {_Type, Sock, {http_header, _Length, Key, undefined, Value}} -> ok
+            , Headers = [ {header, {Key, Value}} | Headers0 ]
+            , recv_headers(Sock, Headers)
+        ; {_Type, Sock, http_eoh} -> ok
+            , Packets = lists:reverse(Headers0)
+            , case lists:keytake(http_response, 1, Packets)
+                of false -> ok
+                    , {error, no_http_response}
+                ; {value, RequestPacket, HeaderPackets} -> ok
+                    , {http_response, Version, Code, Reason} = RequestPacket
+                    , Response_headers = [ {to_atom(Key), Val} || {header, {Key, Val}} <- HeaderPackets ]
+
+                    % Done. Return the response and body receiver.
+                    , inet:setopts(Sock, [binary, {packet,0}, {active,false}])
+                    , Response = new_response({{Version, Code, Reason}, Response_headers, undefined})
+                    , Body_handler = fun() -> get_body(Sock) end
+                    , {Response, Body_handler}
+                end
+        ; Msg -> ok
+            , io:format("Unknown message: ~p\n", [Msg])
+            , {error, {http_unknown_message, Msg}}
+        after 3000 -> ok
+            , {error, header_timeout}
         end
     .
 
-get_body(Req) -> ok
+get_body(Sock) -> ok
+    , inet:setopts(Sock, [{active,once}])
     , receive
-        {http, {Req, stream, Data}} when is_binary(Data) -> ok
+        {_Type, Sock, Data} -> ok
             , Data
-        ; {http, {Req, stream_end, _Headers}} -> ok
+        ; {tcp_closed, Sock} -> ok
             , 'end'
+        ; Msg -> ok
+            , io:format("Unknown message: ~p\n", [Msg])
+            , {error, {unknown_message, Msg}}
         after 1000 -> ok
             , {error, data_timeout}
         end
@@ -328,5 +379,9 @@ to_list(X) when is_binary(X) -> binary_to_list(X);
 to_list(X) when is_number(X) -> integer_to_list(X);
 to_list(X) when is_atom(X)   -> atom_to_list(X);
 to_list(X) when is_list(X)   -> X.
+
+to_atom(X) when is_list(X) -> erlang:list_to_atom(X);
+to_atom(X) when is_binary(X) -> to_atom(binary_to_list(X));
+to_atom(X) when is_atom(X) -> X.
 
 % vim: sts=4 sw=4 et
