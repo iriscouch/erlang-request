@@ -7,6 +7,7 @@
 -define(TIMEOUT, 3000).
 
 run(noop, Port) -> listen(Port, fun noop/5);
+run(stream, Port) -> listen(Port, fun stream/5);
 run(echo, Port) -> listen(Port, fun echo/5).
 
 noop(Sock, _Method, _Path, Version, _Headers) -> ok
@@ -50,6 +51,33 @@ echo(Sock, Method, {abs_path, Path}, Version, Headers) -> ok
         , "}"
         ]
     , reply(Sock, Version, Resp_headers, Body)
+    .
+
+stream(Sock, Method, {abs_path, Path}, _Version, _Headers) -> ok
+    , gen_tcp:send(Sock,
+        [ "HTTP/1.1 200 OK\r\n"
+        , "Content-Type: text/plain\r\n"
+        , "Transfer-Encoding: chunked\r\n"
+        , "Connection: close\r\n"
+        , "\r\n"
+        ])
+
+    , Chunk = fun(Iol) -> ok
+        , Data = iolist_to_binary(Iol)
+        , Len = size(Data)
+        , timer:sleep(100)
+        , gen_tcp:send(Sock,
+            [ io_lib:format("~.16B\r\n", [Len])
+            , Data
+            , "\r\n"
+            ])
+        end
+
+    , Chunk([atom_to_list(Method), "\r\n"])
+    , Chunk([Path, "\r\n"])
+    , Chunk("Goodbye\r\n")
+    , Chunk("")
+    , gen_tcp:close(Sock)
     .
 
 reply(Sock, Version, Body) -> ok
