@@ -28,7 +28,7 @@ test_methods() -> ok
     , Functions = [req, get, put, post, delete]
     , lists:foreach(fun(Func) -> ok
         , Url = ?HOST ++ "/" ++ atom_to_list(Func)
-        , {Res, Body} = request:Func(Url)
+        , {Res, _Body} = request:Func(Url)
         , etap:isnt(Res, error, "Request using request:" ++ atom_to_list(Func))
         end, Functions)
 
@@ -58,7 +58,7 @@ test_response() -> ok
     , etap:is(Res:headers("Content-Type"), "application/json", "res.headers['content-type']")
     , etap:is(Res:headers("X-Not-Here"), undefined, "res.headers.not_here == undefined")
 
-    , etap:ok(is_list(Body), "res.body is a string")
+    , etap:ok(is_binary(Body), "res.body is a string")
     , etap:is(Body, Res:body(), "res.body and body are the same thing")
     .
 
@@ -111,17 +111,16 @@ handler(Method) -> ok
     , Waiter = fun(Handler_pid) -> ok
         , receive
             {Handler_pid, ok} -> ok
-            after ?TIMEOUT    -> throw(timeout)
+            after ?TIMEOUT    -> throw(handler_timeout)
             end
         end
     , Handler = fun(Type, _Result) -> ok
-        , etap:isnt(Type, error, "Async handler: " ++ Method)
+        , etap:isnt(Type, error, io_lib:format("Async handler ~p: ~s", [self(), Method]))
         , Waiter_pid ! {self(), ok}
         end
     , {Waiter, Handler}
     .
 
 dot(Obj, Key) -> request:dot(Obj, Key).
-dot(Obj, Key, Val) -> request:dot(Obj, Key, Val).
 
 % vim: sts=4 sw=4 et

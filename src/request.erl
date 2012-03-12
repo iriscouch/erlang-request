@@ -39,28 +39,77 @@ api(async) -> ok
     , fun ?MODULE:req/2
     .
 
+new_response(Headers) when is_list(Headers) -> ok
+    % Just fake the reply line since it is unknown.
+    , {Version, Status, Reason} = {"1.1", 200, "OK"}
+    , new_response({{Version, Status, Reason}, Headers, undefined})
+    ;
+
 new_response({{Version_str, Status, Message}, Headers, Body}) -> ok
     , Version = case Version_str
         of "HTTP/" ++ Rest -> Rest
-        ; _                -> undefined
+        ;  _               -> to_list(Version_str)
         end
     , request_response:new(Version, Status, Message, normal_headers(Headers), Body)
+    .
+
+new_response(Response, New_data) -> ok
+    , {Version, Status, Reason} = {Response:httpVersion(), Response:statusCode(), Response:message()}
+    , {Headers} = Response:headers()
+    , new_response({{Version, Status, Reason}, Headers, New_data})
+    .
+
+req(Url) when is_list(Url) -> ok
+    , req({[ {url,Url} ]})
+    ;
+
+req(Options) -> ok
+    , Waiter = self()
+    , Callback = fun
+        (error, Reason) -> ok
+            , Waiter ! {self(), {error, Reason}}
+        ; (Res, Body) -> ok
+            , Waiter ! {self(), {Res, Body}}
+        end
+
+    , Runner = req(Options, Callback)
+    , Result = receive
+        {Runner, Received_result} -> ok
+            , Received_result
+        after 3000 -> ok
+            , {error, request_timeout}
+        end
+
+    , case Result
+        of {error, _Reason} -> ok
+            , Result
+        ; {Res, Body} -> ok
+            , case dot(Options, {".json", false}) =/= false
+                of false -> ok
+                    , Result
+                ; _ -> ok
+                    % Decode the JSON.
+                    , try ejson:decode(Body)
+                        of Obj -> ok
+                            , Response = new_response(Res, Obj)
+                            , {Response, Response:body()}
+                        catch E_type:E_err -> ok
+                            , {error, {E_type, E_err}}
+                        end
+                end
+        end
     .
 
 req(Url, Callback) when is_list(Url) -> ok
     , req({[{url,Url}]}, Callback)
     ;
 
-req({Options}, Callback) when is_list(Options) andalso is_function(Callback) -> ok
-    , Request_pid = spawn(fun() -> waiter(Options, Callback) end)
-    , Request_pid
+req({_Opts}=Options, Callback) when is_list(_Opts) andalso is_function(Callback) -> ok
+    , Pid = spawn(fun() -> req(child, Options, Callback) end)
+    , Pid
     .
 
-req(Url) when is_list(Url) -> ok
-    , req({[{url, Url}]})
-    ;
-
-req({Obj}=Options) when is_list(Obj) -> ok
+req(child, Options, Callback) -> ok
     , Uri = dot(Options, uri)
     , Url = dot(Options, {url, Uri})
     , Body_val = dot(Options, {".body", <<"">>})
@@ -106,37 +155,83 @@ req({Obj}=Options) when is_list(Obj) -> ok
                     , Headers1 = Headers ++ [{"content-length", Content_length}]
                     , {Url, Headers1, Content_type, Body}
                 end
+
+            , Response_callback = case dot(Options, ".onResponse")
+                of true -> Callback
+                ;  _    -> response_callback(Callback)
+                end
+
             , HTTPOptions = []
-            , Req_options = []
-            , execute([Method, Req, HTTPOptions, Req_options], Is_json)
+            , Req_options = [{sync,false}, {stream,self}, {full_result,true} ]
+            , execute([Method, Req, HTTPOptions, Req_options], Response_callback)
         end
     .
 
-execute(Params, Is_json) -> ok
+execute(Params, Callback) -> ok
     , try apply(httpc, request, Params)
         of {error, Reason} -> ok
-            , {error, Reason}
-        ; {ok, {Res_head, Res_headers, Res_body}=Res} -> ok
-            , case Is_json
-                of false -> ok
-                    % No JSON decoding.
-                    , Response = new_response(Res)
-                    , {Response, Response:body()}
-                ;  _ -> ok
-                    % Decode the JSON.
-                    , try ejson:decode(Res_body)
-                        of Eobj -> ok
-                            , Response = new_response({Res_head, Res_headers, Eobj})
-                            , {Response, Response:body()}
-                        catch E_type:E_err -> ok
-                            , {error, {E_type, E_err}}
-                        end
-                end
+            , Callback(error, Reason)
+        ; {ok, Req_id} -> ok
+            , head(Req_id, Callback)
         catch A:B -> ok
-            , {error, {A, B}}
+            , Callback(error, {A, B})
         end
     .
 
+head(Req, Callback) -> ok
+    , receive
+        {http, {Req, stream_start, Headers}} -> ok
+            , io:format("HEAD ~p\n", [Headers])
+            , Response = new_response(Headers)
+            , Body_handler = fun() -> get_body(Req) end
+            , Callback(Response, Body_handler)
+        ;E -> ok
+            , io:format("Else ~p\n", [E])
+        after 1000 -> ok
+            , {error, headers_timeout}
+        end
+    .
+
+get_body(Req) -> ok
+    , receive
+        {http, {Req, stream, Data}} when is_binary(Data) -> ok
+            , Data
+        ; {http, {Req, stream_end, _Headers}} -> ok
+            , 'end'
+        after 1000 -> ok
+            , {error, data_timeout}
+        end
+    .
+
+% Convert a "full" callback (expecting response, body) into an onResponse callback.
+response_callback(Callback) -> ok
+    , fun (error, Reason) -> ok
+            , Callback(error, Reason)
+        ; (Res, Get_data) -> ok
+            , {Type, Value} = collect_response(Res, Get_data)
+            , Callback(Type, Value)
+        end
+    .
+
+% Collect all callbacks and return a single response.
+collect_response(error, Reason) -> ok
+    , {error, Reason}
+    ;
+
+collect_response(Res, Get_data) -> ok
+    , collect_response(Res, Get_data, <<"">>)
+    .
+
+collect_response(Res, Get_data, Current_data) -> ok
+    , case Get_data()
+        of Data when is_binary(Data) -> ok
+            , New_data = <<Current_data/binary, Data/binary>>
+            , collect_response(Res, Get_data, New_data)
+        ; 'end' -> ok
+            , Response = new_response(Res, Current_data)
+            , {Response, Response:body()}
+        end
+    .
 
 get(Url) when is_list(Url) -> ok
     , ?MODULE:get({[{url,Url}]})
@@ -202,11 +297,6 @@ delete({Options}, Callback) -> ok
     , req(dot({Options}, method, 'delete'), Callback)
     .
 
-
-waiter(Options, Callback) -> ok
-    , {One, Two} = req({Options})
-    , Callback(One, Two)
-    .
 
 %
 % Utilities

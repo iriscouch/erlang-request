@@ -29,6 +29,11 @@ test_normal() -> ok
     .
 
 test_streaming_body() -> ok
+    , Opts = {[ {url,?HOST++"/streaming/post"}, {onResponse,true} ]}
+    , {Res, Body} = request:post(Opts)
+    , etap:isnt(Res, error, "Stream server response to POST")
+    , io:format("~p\n", [Res:headers()])
+    , etap:is(Res:headers("transfer-encoding"), "chunked", "Streamer is a chunked encoding")
     .
 
 dot(Obj, Key) -> request:dot(Obj, Key).
