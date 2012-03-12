@@ -30,7 +30,6 @@ test_methods() -> ok
         , Url = ?HOST ++ "/" ++ atom_to_list(Func)
         , {Res, Body} = request:Func(Url)
         , etap:isnt(Res, error, "Request using request:" ++ atom_to_list(Func))
-        , io:format("---> ~p\n", [Body])
         end, Functions)
 
     , Request = request:api(async)
