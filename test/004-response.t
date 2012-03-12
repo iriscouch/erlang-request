@@ -4,7 +4,7 @@ main([]) -> ok
     , code:add_pathz("test")
     , code:add_pathz("ebin")
 
-    , etap:plan(9)
+    , etap:plan(10)
     , test()
     , etap:end_tests()
     .
@@ -35,6 +35,8 @@ test_values() -> ok
     , etap:is(Res:headers("content-type"), "application/json", "Response can lookup a header")
     , etap:is(Res:headers("CoNTEnT-LENGTH"), "11", "Response header is case-insensitive")
     , etap:is(Res:headers("X-Wasnt-there"), undefined, "Missing response header -> undefined")
+
+    , etap:is(Res:body(), "{\"ok\":true}", "Response body is right")
     .
 
 httpc() -> ok
