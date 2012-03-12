@@ -91,9 +91,6 @@ req({Obj}=Options) when is_list(Obj) -> ok
                 of true -> [{"accept","application/json"}]
                 ; false -> []
                 end
-            , HTTPOptions = []
-            , Req_options = []
-            %, Profile = httpc:default_profile()
             , Req = case Method
                 of _ when Method =/= put andalso Method =/= post -> ok
                     , {Url, Headers}
@@ -109,30 +106,34 @@ req({Obj}=Options) when is_list(Obj) -> ok
                     , Headers1 = Headers ++ [{"content-length", Content_length}]
                     , {Url, Headers1, Content_type, Body}
                 end
+            , HTTPOptions = []
+            , Req_options = []
+            , execute([Method, Req, HTTPOptions, Req_options], Is_json)
+        end
+    .
 
-            %, io:format("httpc:request(~p, ~p, ~p, ~p).\n", [Method, Req, Req_options, HTTPOptions])
-            , try httpc:request(Method, Req, Req_options, HTTPOptions)
-                of {error, Reason} -> ok
-                    , {error, Reason}
-                ; {ok, {Res_head, Res_headers, Res_body}=Res} -> ok
-                    , case Is_json
-                        of false -> ok
-                            % No JSON decoding.
-                            , Response = new_response(Res)
+execute(Params, Is_json) -> ok
+    , try apply(httpc, request, Params)
+        of {error, Reason} -> ok
+            , {error, Reason}
+        ; {ok, {Res_head, Res_headers, Res_body}=Res} -> ok
+            , case Is_json
+                of false -> ok
+                    % No JSON decoding.
+                    , Response = new_response(Res)
+                    , {Response, Response:body()}
+                ;  _ -> ok
+                    % Decode the JSON.
+                    , try ejson:decode(Res_body)
+                        of Eobj -> ok
+                            , Response = new_response({Res_head, Res_headers, Eobj})
                             , {Response, Response:body()}
-                        ;  _ -> ok
-                            % Decode the JSON.
-                            , try ejson:decode(Res_body)
-                                of Eobj -> ok
-                                    , Response = new_response({Res_head, Res_headers, Eobj})
-                                    , {Response, Response:body()}
-                                catch E_type:E_err -> ok
-                                    , {error, {E_type, E_err}}
-                                end
+                        catch E_type:E_err -> ok
+                            , {error, {E_type, E_err}}
                         end
-                catch A:B -> ok
-                    , {error, {A, B}}
                 end
+        catch A:B -> ok
+            , {error, {A, B}}
         end
     .
 
