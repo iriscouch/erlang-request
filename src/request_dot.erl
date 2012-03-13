@@ -70,6 +70,12 @@ get_dot({Obj}, [Key | Rest], _Last_key) -> ok
     , get_dot(Value, Rest, Good_key)
     ;
 
+get_dot(Array, [Key | Rest], _Last_key) when is_list(Array) -> ok
+    , Good_key = list_to_integer(Key)
+    , Value = lists:nth(Good_key+1, Array)
+    , get_dot(Value, Rest, Good_key)
+    ;
+
 get_dot(Non_obj, [Key | _Rest], _Last_key) -> ok
     , Msg = io_lib:format("Non-Object has no key: ~p", [Key])
     , throw({dot, lists:flatten(Msg), Non_obj})
