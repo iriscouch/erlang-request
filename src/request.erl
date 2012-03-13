@@ -247,6 +247,34 @@ recv_headers(Sock, Headers0) -> ok
     .
 
 get_body(Response) -> ok
+    , case Response:headers("content-length")
+        of undefined -> get_body(inner, Response)
+        ; Len_s -> ok
+            % If there is a content-length, watch it and start emitting 'end' once it is received.
+            , Unreceived_bytes = case erlang:get(unreceived_bytes)
+                of undefined -> list_to_integer(Len_s)
+                ;  Found     -> Found
+                end
+
+            , case Unreceived_bytes
+                of _None when _None =< 0 -> ok
+                    %, io:format("WARNING: receiving data past the content-length\n")
+                    , Response:destroy()
+                    , 'end'
+                ; _ -> ok
+                    % Get more data.
+                    , case get_body(inner, Response)
+                        of A when is_atom(A) -> A
+                        ; T when is_tuple(T) -> T
+                        ; Data when is_binary(Data) -> ok
+                            , erlang:put(unreceived_bytes, Unreceived_bytes - size(Data))
+                            , Data
+                        end
+                end
+        end
+    .
+
+get_body(inner, Response) -> ok
     , Sock = Response:socket()
     , inet:setopts(Sock, [{active,once}])
     , receive
@@ -264,7 +292,7 @@ get_body(Response) -> ok
 
 get_chunk(Response) -> ok
     , Body = case erlang:get(pending_data)
-        of undefined -> get_body(Response)
+        of undefined -> get_body(inner, Response)
         ;  Pending   -> Pending
         end
 
@@ -276,6 +304,7 @@ get_chunk(Response) -> ok
         ; Chunk -> ok
             , case break_chunk(Chunk)
                 of {0, <<"">>} -> ok
+                    %, Response:destroy()
                     , 'end'
                 ; {Length, Data} when is_integer(Length) andalso is_binary(Data) -> ok
                     , Data
