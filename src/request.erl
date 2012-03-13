@@ -24,7 +24,7 @@ start() -> ok
     %, inets:start()
     .
 
-start(Type) -> ok
+start(_Type) -> ok
     %, ssl:start(Type)
     %, inets:start(Type)
     .
