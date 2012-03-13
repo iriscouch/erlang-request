@@ -53,6 +53,15 @@ request(Url) when is_list(Url) -> ok
     ;
 
 request(Options) -> ok
+    , case dot(Options, ".onResponse")
+        of Response_callback when is_function(Response_callback) -> ok
+            , request(dot(Options, ".onResponse", true), Response_callback)
+        ; _ -> ok
+            , request(sync, Options)
+        end
+    .
+
+request(sync, Options0) -> ok
     , Waiter = self()
     , Callback = fun
         (error, Reason) -> ok
@@ -61,6 +70,7 @@ request(Options) -> ok
             , Waiter ! {self(), {Res, Body}}
         end
 
+    , Options = dot(Options0, ".parent_pid", Waiter)
     , Runner = request(Options, Callback)
     , Result = receive
         {Runner, Received_result} -> ok
@@ -87,14 +97,13 @@ request(Options) -> ok
                         end
                 end
         end
-    .
+    ;
 
 request(Url, Callback) when is_list(Url) -> ok
     , request({[{url,Url}]}, Callback)
     ;
 
-request({_Opts}=Options0, Callback) when is_list(_Opts) andalso is_function(Callback) -> ok
-    , Options = dot(Options0, ".parent_pid", self())
+request({_Opts}=Options, Callback) when is_list(_Opts) andalso is_function(Callback) -> ok
     , Pid = spawn(fun() -> request(child, Options, Callback) end)
     , Pid
     .
@@ -164,9 +173,11 @@ request(child, Options, Callback) -> ok
                     , Callback(error, Error)
                 ; {Res, Get_body} -> ok
                     , case dot(Options, ".onResponse")
-                        of true -> ok
-                            % The original caller will probably want to receive more data.
-                            , chown(Res:socket(), dot(Options, {parent_pid, self()}))
+                        of Response_callback when is_function(Response_callback) -> ok
+                            , chown(Res:socket(), dot(Options, {".parent_pid", self()}))
+                            , Response_callback(Res, Get_body)
+                        ; true -> ok
+                            , chown(Res:socket(), dot(Options, {".parent_pid", self()}))
                             , Callback(Res, Get_body)
                         ; _ -> ok
                             , Wrapped = response_callback(Callback)
@@ -394,6 +405,7 @@ delete({Options}, Callback) -> ok
 %
 
 chown(Socket, Pid) -> ok
+    %, io:format("chown ~p from ~p to ~p)\n", [Socket, self(), Pid])
     , gen_tcp:controlling_process(Socket, Pid)
     .
 

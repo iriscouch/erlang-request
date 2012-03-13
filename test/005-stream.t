@@ -12,7 +12,7 @@ main([]) -> ok
     , request:start()
     , http_server:run(stream, ?PORT)
 
-    , etap:plan(8)
+    , etap:plan(16)
     , test()
     , etap:end_tests()
     .
@@ -33,11 +33,28 @@ test_streaming_body() -> ok
     , {Res, Body} = request:post(Opts)
     , etap:isnt(Res, error, "Stream server response to POST")
     , etap:is(Res:headers("transfer-encoding"), "chunked", "Streamer is a chunked encoding")
-
     , etap:is(Body(), <<"POST\r\n">>, "First streamer line")
     , etap:is(Body(), <<"/streaming/post\r\n">>, "Second streamer line")
     , etap:is(Body(), <<"Goodbye\r\n">>, "Third streamer line")
     , etap:is(Body(), 'end', "Streamer end")
+
+    , Me = self()
+    , Check_body = fun(Resp, Get_body) -> ok
+        , etap:isnt(Resp, error, "Good response for async onRequest")
+        , etap:is(Res:headers("transfer-encoding"), "chunked", "Async stream is a chunked encoding")
+        , etap:is(Get_body(), <<"POST\r\n">>, "First async streamer line")
+        , etap:is(Get_body(), <<"/streaming/async\r\n">>, "Second async streamer line")
+        , etap:is(Get_body(), <<"Goodbye\r\n">>, "Third async streamer line")
+        , etap:is(Get_body(), 'end', "Async streamer end")
+        , Me ! done
+        end
+    , Pid = request:request({[ {method,post}, {url,?HOST++"/streaming/async"}, {onResponse,Check_body} ]})
+    , etap:ok(is_pid(Pid), "Request with onResponse is async")
+    , Done = receive
+        done       -> true
+        after 1000 -> false
+        end
+    , etap:ok(Done, "Body check finished")
     .
 
 %dot(Obj, Key) -> request:dot(Obj, Key).
