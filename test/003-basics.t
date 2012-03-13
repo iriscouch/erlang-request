@@ -4,6 +4,8 @@
 -define(PORT, 12345).
 -define(HOST, "http://localhost:12345").
 
+-import(request, [request/1, request/2]).
+
 main([]) -> ok
     , code:add_pathz("test")
     , code:add_pathz("ebin")
@@ -25,14 +27,13 @@ test() -> ok
     .
 
 test_methods() -> ok
-    , Functions = [req, get, put, post, delete]
+    , Functions = [request, get, put, post, delete]
     , lists:foreach(fun(Func) -> ok
         , Url = ?HOST ++ "/" ++ atom_to_list(Func)
         , {Res, _Body} = request:Func(Url)
         , etap:isnt(Res, error, "Request using request:" ++ atom_to_list(Func))
         end, Functions)
 
-    , Request = request:api(async)
     , lists:foreach(fun(Func) -> ok
         , {Waiter, Handler} = handler(atom_to_list(Func))
         , Url = ?HOST ++ "/async/" ++ atom_to_list(Func)
@@ -40,7 +41,7 @@ test_methods() -> ok
             of req -> Url
             ; _ -> {[{method,Func}, {uri,Url}]}
             end
-        , Pid = Request(Opts, Handler)
+        , Pid = request(Opts, Handler)
         , Waiter(Pid)
         end, Functions)
     .

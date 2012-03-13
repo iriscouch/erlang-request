@@ -11,32 +11,22 @@
 % the License.
 
 -module(request).
--export([start/0, start/1, api/0, api/1]).
+-export([start/0, start/1]).
 
--export([req/1, get/1, put/1, post/1, delete/1]).
--export([req/2, get/2, put/2, post/2, delete/2]).
+-export([request/1, get/1, put/1, post/1, delete/1]).
+-export([request/2, get/2, put/2, post/2, delete/2]).
 
 -export([new_response/4]).
 -export([dot/2, dot/3, normal_key/1]).
 
 start() -> ok
-    , ssl:start()
-    , inets:start()
+    %, ssl:start()
+    %, inets:start()
     .
 
 start(Type) -> ok
-    , ssl:start(Type)
-    , inets:start(Type)
-    .
-
-api() -> ok
-    , start()
-    , fun ?MODULE:req/1
-    .
-
-api(async) -> ok
-    , start()
-    , fun ?MODULE:req/2
+    %, ssl:start(Type)
+    %, inets:start(Type)
     .
 
 new_response(Socket, {Version_str, Status, Message}, Headers, Body) -> ok
@@ -58,11 +48,11 @@ new_response(Response, New_data) -> ok
     , new_response(Socket, {Version, Status, Reason}, Headers, New_data)
     .
 
-req(Url) when is_list(Url) -> ok
-    , req({[ {url,Url} ]})
+request(Url) when is_list(Url) -> ok
+    , request({[ {url,Url} ]})
     ;
 
-req(Options) -> ok
+request(Options) -> ok
     , Waiter = self()
     , Callback = fun
         (error, Reason) -> ok
@@ -71,7 +61,7 @@ req(Options) -> ok
             , Waiter ! {self(), {Res, Body}}
         end
 
-    , Runner = req(Options, Callback)
+    , Runner = request(Options, Callback)
     , Result = receive
         {Runner, Received_result} -> ok
             , Received_result
@@ -99,17 +89,17 @@ req(Options) -> ok
         end
     .
 
-req(Url, Callback) when is_list(Url) -> ok
-    , req({[{url,Url}]}, Callback)
+request(Url, Callback) when is_list(Url) -> ok
+    , request({[{url,Url}]}, Callback)
     ;
 
-req({_Opts}=Options0, Callback) when is_list(_Opts) andalso is_function(Callback) -> ok
+request({_Opts}=Options0, Callback) when is_list(_Opts) andalso is_function(Callback) -> ok
     , Options = dot(Options0, ".parent_pid", self())
-    , Pid = spawn(fun() -> req(child, Options, Callback) end)
+    , Pid = spawn(fun() -> request(child, Options, Callback) end)
     , Pid
     .
 
-req(child, Options, Callback) -> ok
+request(child, Options, Callback) -> ok
     , Uri = dot(Options, uri)
     , Url = dot(Options, {url, Uri})
     , Body_val = dot(Options, {".body", <<"">>})
@@ -339,7 +329,7 @@ get(Url) when is_list(Url) -> ok
     ;
 
 get({Options}) -> ok
-    , req(dot({Options}, method, 'get'))
+    , request(dot({Options}, method, 'get'))
     .
 
 put(Url) when is_list(Url) -> ok
@@ -347,7 +337,7 @@ put(Url) when is_list(Url) -> ok
     ;
 
 put({Options}) -> ok
-    , req(dot({Options}, method, 'put'))
+    , request(dot({Options}, method, 'put'))
     .
 
 post(Url) when is_list(Url) -> ok
@@ -355,7 +345,7 @@ post(Url) when is_list(Url) -> ok
     ;
 
 post({Options}) -> ok
-    , req(dot({Options}, method, 'post'))
+    , request(dot({Options}, method, 'post'))
     .
 
 delete(Url) when is_list(Url) -> ok
@@ -363,7 +353,7 @@ delete(Url) when is_list(Url) -> ok
     ;
 
 delete({Options}) -> ok
-    , req(dot({Options}, method, 'delete'))
+    , request(dot({Options}, method, 'delete'))
     .
 
 get(Url, Callback) when is_list(Url) -> ok
@@ -371,7 +361,7 @@ get(Url, Callback) when is_list(Url) -> ok
     ;
 
 get({Options}, Callback) -> ok
-    , req(dot({Options}, method, 'get'), Callback)
+    , request(dot({Options}, method, 'get'), Callback)
     .
 
 put(Url, Callback) when is_list(Url) -> ok
@@ -379,7 +369,7 @@ put(Url, Callback) when is_list(Url) -> ok
     ;
 
 put({Options}, Callback) -> ok
-    , req(dot({Options}, method, 'put'), Callback)
+    , request(dot({Options}, method, 'put'), Callback)
     .
 
 post(Url, Callback) when is_list(Url) -> ok
@@ -387,7 +377,7 @@ post(Url, Callback) when is_list(Url) -> ok
     ;
 
 post({Options}, Callback) -> ok
-    , req(dot({Options}, method, 'post'), Callback)
+    , request(dot({Options}, method, 'post'), Callback)
     .
 
 delete(Url, Callback) when is_list(Url) -> ok
@@ -395,7 +385,7 @@ delete(Url, Callback) when is_list(Url) -> ok
     ;
 
 delete({Options}, Callback) -> ok
-    , req(dot({Options}, method, 'delete'), Callback)
+    , request(dot({Options}, method, 'delete'), Callback)
     .
 
 

@@ -4,6 +4,8 @@
 -define(PORT, 12345).
 -define(HOST, "http://localhost:12345").
 
+-import(request, [request/1, request/2]).
+
 main([]) -> ok
     , code:add_pathz("test")
     , code:add_pathz("ebin")
@@ -12,42 +14,31 @@ main([]) -> ok
     , request:start()
     , http_server:run(noop, ?PORT)
 
-    , etap:plan(20)
+    , etap:plan(18)
     , test()
     , etap:end_tests()
     .
 
 test() -> ok
-    , test_api()
     , test_call_styles()
     , test_shortcuts()
     .
 
-test_api() -> ok
-    , Request = request:api()
-    , etap:ok(is_function(Request), "api() returns an API function")
-
-    , Request_async = request:api(async)
-    , etap:ok(is_function(Request_async), "api(async) returns an API function")
-    .
-
 test_call_styles() -> ok
-    , Request = request:api()
-    , ARequest = request:api(async)
     , {Waiter, Handler} = handler(ok)
 
-    , Res1 = request:req(?HOST)
-    , etap:ok(is_tuple(Res1), "request:req(url) returns a tuple")
+    , Res1 = request:request(?HOST)
+    , etap:ok(is_tuple(Res1), "request:request(url) returns a tuple")
 
-    , Res2 = Request(?HOST)
-    , etap:ok(is_tuple(Res2), "Request(url) returns a tuple")
+    , Res2 = request(?HOST)
+    , etap:ok(is_tuple(Res2), "request(url) returns a tuple")
 
-    , Pid1 = request:req(?HOST, Handler)
-    , etap:ok(is_pid(Pid1), "request:req(url, callback) returns a PID")
+    , Pid1 = request:request(?HOST, Handler)
+    , etap:ok(is_pid(Pid1), "request:request(url, callback) returns a PID")
     , Waiter(Pid1)
 
-    , Pid2 = ARequest(?HOST, Handler)
-    , etap:ok(is_pid(Pid2), "Request(url, callback) returns a PID")
+    , Pid2 = request(?HOST, Handler)
+    , etap:ok(is_pid(Pid2), "request(url, callback) returns a PID")
     , Waiter(Pid2)
     .
 
@@ -94,7 +85,7 @@ handler(ok) -> ok
             end
         end
     , Handler = fun(_Type, _Result) -> ok
-        , etap:ok(true, "Request callback runs")
+        , etap:ok(true, "request callback runs")
         , Waiter_pid ! {self(), ok}
         end
     , {Waiter, Handler}
