@@ -4,12 +4,12 @@ Erlang Request is a port of Mikeal Rogers's ubiquitous and excellent [request][r
 
 # Examples
 
-Fetch a resource asynchronously.
-
 Fetch a resource the Erlangy synchronous way:
 
 ```erlang
-case request:req("http://example.com/some/resource.txt")
+-import(request, [request/1]).
+
+case request("http://example.com/some/resource.txt")
     of {error, Error} ->
         io:format("Got an error: ~p\n", [Error])
     ; {Response, Body} ->
@@ -23,7 +23,7 @@ io:format("Request complete\n")
 Or fetch a resource the Javascripty asynchronous way:
 
 ```erlang
-Pid = request:req("http://example.com/some/resource.txt", fun
+Pid = request("http://example.com/some/resource.txt", fun
     (error, Error) ->
         io:format("Got an error: ~p\n", [Error])
     ; (Response, Body) ->
@@ -34,32 +34,13 @@ Pid = request:req("http://example.com/some/resource.txt", fun
 io:format("Request is in-flight as ~p\n", [Pid])
 ```
 
-You can also get a more familiar access to Request's main function.
-
-```erlang
-Request = request:api(), % Home, sweet home
-
-{Response, Body} = Request("http://example.com/")
-```
-
-Or asynchronously
-
-```erlang
-Request = request:api(async), % Home, sweet home
-
-Request("http://example.com/some/resource.txt", fun
-    (Response, Body) ->
-        io:format("This feels nice: " ++ Body)
-    end)
-```
-
 ## Details
 
-More advanced usage works like JavaScript request. The first parameter is a JSON-style object.
+More advanced usage works like JavaScript request. The first parameter is an EJSON object.
 Send a resource:
 
 ```erlang
-request:put({[{uri,'/some/resource.xml'}, {body,'<foo><bar/></foo>'}]}, fun
+request:put({[ {uri,'/some/resource.xml'}, {body,"<foo><bar/></foo>"} ]}, fun
     (error, Er) ->
         io:format("XML PUT failed: ~p\n", [Er])
     ; (Res, Body) ->
@@ -83,7 +64,29 @@ on_response(Res, Body) ->
 Or, use this shorthand version (pass data into the `json` option directly):
 
 ```erlang
-Request([{method,'POST'}, {url,"/db"}, {json, {[{relaxed,true}]}}], fun on_response/2)
+request({[ {method,'POST'}, {url,"/db"}, {json,{[ {relaxed,true} ]}} ]}, fun on_response/2)
+```
+
+## Streaming response
+
+Like Node.js *request*, you can be called back immediately when the response (status and headers) arrives. Next, run the given function to receive body data.
+
+```erlang
+Url = "http://example.iriscouch.com/db/_changes?feed=continuous",
+{Response, Get_body} = request({[ {url,Url}, {onResponse,true} ]})
+case Response:statusCode() of
+    200 -> stream_body(1, Get_body);
+    _   -> io:format("Couch said no\n")
+end
+
+stream_body(Line_number, Get_body) ->
+    case Get_body() of
+        'end' ->
+            io:format("End of body.\n");
+        Data ->
+            io:format("Chunk ~w: ~s\n", [Line_number, Data]),
+            stream_body(Line_number + 1, Get_body)
+    end.
 ```
 
 ## License
