@@ -1,11 +1,16 @@
 #! /usr/bin/env escript
 
--define(COUCH, "http://localhost:5984").
 -define(TIMEOUT, 3000).
+-define(PORT, 12345).
+-define(HOST, "http://localhost:12345").
 
 main([]) -> ok
     , code:add_pathz("test")
     , code:add_pathz("ebin")
+    , code:add_pathz("deps/ejson/ebin")
+
+    , request:start()
+    , http_server:run(noop, ?PORT)
 
     , etap:plan(20)
     , test()
@@ -31,24 +36,24 @@ test_call_styles() -> ok
     , ARequest = request:api(async)
     , {Waiter, Handler} = handler(ok)
 
-    , Res1 = request:req(?COUCH)
+    , Res1 = request:req(?HOST)
     , etap:ok(is_tuple(Res1), "request:req(url) returns a tuple")
 
-    , Res2 = Request(?COUCH)
+    , Res2 = Request(?HOST)
     , etap:ok(is_tuple(Res2), "Request(url) returns a tuple")
 
-    , Pid1 = request:req(?COUCH, Handler)
+    , Pid1 = request:req(?HOST, Handler)
     , etap:ok(is_pid(Pid1), "request:req(url, callback) returns a PID")
     , Waiter(Pid1)
 
-    , Pid2 = ARequest(?COUCH, Handler)
+    , Pid2 = ARequest(?HOST, Handler)
     , etap:ok(is_pid(Pid2), "Request(url, callback) returns a PID")
     , Waiter(Pid2)
     .
 
 test_shortcuts() -> ok
     , {Waiter, Handler} = handler(ok)
-    , Url = ?COUCH ++ "/db"
+    , Url = ?HOST ++ "/db"
 
     , Get = request:get(Url)
     , etap:ok(is_tuple(Get), "request:get() runs")
