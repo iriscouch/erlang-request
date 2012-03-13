@@ -13,7 +13,7 @@
 -module(request_response, [Socket, Version, Status, Message, Headers, Body]).
 -author('Jason Smith <jhs@iriscouch.com>').
 
--export([socket/0, httpVersion/0, statusCode/0, message/0, body/0]).
+-export([socket/0, httpVersion/0, statusCode/0, message/0, body/0, destroy/0]).
 -export([headers/0, headers/1]).
 
 socket() -> Socket.
@@ -27,6 +27,10 @@ message() -> Message.
 body() -> Body.
 
 headers() -> Headers.
+
+destroy() -> ok
+    , gen_tcp:close(Socket)
+    .
 
 headers(Key) -> ok
     , {Obj} = Headers

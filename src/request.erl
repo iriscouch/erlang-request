@@ -233,8 +233,8 @@ recv_headers(Sock, Headers0) -> ok
                     , inet:setopts(Sock, [binary, {packet,0}, {active,false}])
                     , Response = new_response(Sock, {Version, Code, Reason}, Response_headers, undefined)
                     , Body_handler = case Response:headers("transfer-encoding")
-                        of "chunked" -> fun() -> get_chunk(Sock) end
-                        ;  _         -> fun() -> get_body(Sock) end
+                        of "chunked" -> fun() -> get_chunk(Response) end
+                        ;  _         -> fun() -> get_body(Response) end
                         end
                     , {Response, Body_handler}
                 end
@@ -246,7 +246,8 @@ recv_headers(Sock, Headers0) -> ok
         end
     .
 
-get_body(Sock) -> ok
+get_body(Response) -> ok
+    , Sock = Response:socket()
     , inet:setopts(Sock, [{active,once}])
     , receive
         {_Type, Sock, Data} -> ok
@@ -261,9 +262,9 @@ get_body(Sock) -> ok
         end
     .
 
-get_chunk(Sock) -> ok
+get_chunk(Response) -> ok
     , Body = case erlang:get(pending_data)
-        of undefined -> get_body(Sock)
+        of undefined -> get_body(Response)
         ;  Pending   -> Pending
         end
 
