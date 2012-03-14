@@ -75,7 +75,7 @@ request(sync, Options0) -> ok
     , Result = receive
         {Runner, Received_result} -> ok
             , Received_result
-        after 3000 -> ok
+        after 2 * 60 * 1000 -> ok
             , {error, request_timeout}
         end
 
