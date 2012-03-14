@@ -137,7 +137,7 @@ request(child, Options, Callback) -> ok
             , Method = dot(Options, {method, get})
 
             , {ok, Parsed_url} = http_uri:parse(Url)
-            , {Proto, _Creds, Hostname, Port, _Path, _Query} = Parsed_url
+            , {Proto, Creds, Hostname, Port, _Path, _Query} = Parsed_url
             , Host = case {Proto, Port}
                 of {http, 80} -> Hostname
                 ; {https, 443} -> Hostname
@@ -147,10 +147,17 @@ request(child, Options, Callback) -> ok
             , Headers = lists:flatten(
                 [ {"Host",Host}
                 , {"Connection","close"}
+
+                , case Creds
+                    of "" -> []
+                    ;  _  -> [{"Authorization","Basic " ++ base64:encode_to_string(Creds)}]
+                    end
+
                 , case Is_json
                     of true -> [{"Accept","application/json"}]
                     ; false -> []
                     end
+
                 , case Method =:= put orelse Method =:= post
                     of false -> []
                     ; true -> ok

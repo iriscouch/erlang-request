@@ -2,7 +2,8 @@
 
 -define(TIMEOUT, 3000).
 -define(PORT, 12345).
--define(HOST, "http://localhost:12345").
+-define(SERVER, "localhost").
+-define(HOST, "http://" ++ ?SERVER ++ ":" ++ integer_to_list(?PORT)).
 
 -import(request, [request/1, request/2]).
 
@@ -14,7 +15,7 @@ main([]) -> ok
     , request:start()
     , http_server:run(echo, ?PORT)
 
-    , etap:plan(46)
+    , etap:plan(48)
     , test()
     , etap:end_tests()
     .
@@ -24,6 +25,7 @@ test() -> ok
     , test_response()
     , test_json()
     , test_syntax()
+    , test_auth()
     .
 
 test_methods() -> ok
@@ -105,6 +107,13 @@ test_syntax() -> ok
         , etap:is(dot(Roundtrip_body, ".method"), Meth_b, "Server sent back method: " ++ Meth_s)
         , etap:ok(Req_body =:= Roundtrip_body, "Body round-tripped through request/response: " ++ Meth_s)
         end, Store_methods)
+    .
+
+test_auth() -> ok
+    , Url = "http://foo:bar@" ++ ?SERVER ++ ":" ++ integer_to_list(?PORT)
+    , {Res, Body} = request({[ {url,Url}, {json,true} ]})
+    , etap:isnt(Res, error, "Authenticated query")
+    , etap:is(dot(Body, ".headers.Authorization"), <<"Basic Zm9vOmJhcg==">>, "Basic auth header")
     .
 
 handler(Method) -> ok
