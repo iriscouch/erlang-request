@@ -62,19 +62,29 @@ stream(Sock, Method, {abs_path, Path}, _Version, _Headers) -> ok
         , "\r\n"
         ])
 
+    , Send = fun(Data) -> ok
+        , case gen_tcp:send(Sock, Data)
+            of ok -> ok
+            ;  Not_ok -> ok
+                , io:format("Error sending to ~p: ~p\n", [Sock, Not_ok])
+                , throw({error, Not_ok})
+            end
+        end
+
     , Chunk = fun(Iol) -> ok
         , Data = iolist_to_binary(Iol)
         , Len = size(Data)
-        , timer:sleep(100)
-        , Outgoing =
-            [ io_lib:format("~.16B\r\n", [Len])
-            , Data
-            , "\r\n"
-            ]
-        , case gen_tcp:send(Sock, Outgoing)
-            of ok -> ok
-            ; Not_ok -> ok
-                , io:format("Error sending to ~p: ~p\n", [Sock, Not_ok])
+
+        , Send(io_lib:format("~.16B\r\n", [Len]))
+        , case size(Data) == 0
+            of true -> ok
+                , timer:sleep(100)
+                , Send(Data)
+            ; false -> ok
+                , timer:sleep(50)
+                , Send(binary:part(Data, {0,1}))
+                , timer:sleep(50)
+                , Send([binary:part(Data, {1, Len - 1}), "\r\n"])
             end
         end
 

@@ -299,8 +299,15 @@ get_body(inner, Response) -> ok
 
 get_chunk(Response) -> ok
     , Body = case erlang:get(pending_data)
-        of undefined -> get_body(inner, Response)
-        ;  Pending   -> Pending
+        of undefined -> ok
+            , get_body(inner, Response)
+        ; <<"">> -> ok
+            , get_body(inner, Response)
+        ; Pending when is_binary(Pending) -> ok
+            , Pending
+        ; {incomplete, First_part} -> ok
+            , Next_part = get_body(inner, Response)
+            , <<First_part/binary, Next_part/binary>>
         end
 
     , case Body
@@ -310,33 +317,45 @@ get_chunk(Response) -> ok
             , {error, {bad_chunk, Not_bin}}
         ; Chunk -> ok
             , case break_chunk(Chunk)
-                of {0, <<"">>} -> ok
+                of {0, <<"">>, <<"">>} -> ok
                     %, Response:destroy()
                     , 'end'
-                ; {Length, Data} when is_integer(Length) andalso is_binary(Data) -> ok
+                ; {Length, Data, Remaining} when is_integer(Length) andalso is_binary(Data) -> ok
+                    , erlang:put(pending_data, Remaining)
                     , Data
+                ; {incomplete, Data} -> ok
+                    , erlang:put(pending_data, {incomplete, Data})
+                    , get_chunk(Response)
                 ; _ -> ok
                     , {error, {bad_chunk, Chunk}}
                 end
         end
     .
 
+break_chunk(<<"0\r\n">>) -> ok
+    % This is the end of transmission indicator.
+    , {0, <<"">>, <<"">>}
+    ;
+
 break_chunk(Chunk) when is_binary(Chunk) -> ok
     , case re:run(Chunk, "^([0-9A-Fa-f]+)\r\n")
         of nomatch -> ok
-            , nomatch
+            , {incomplete, Chunk}
         ; {match, [{0, Start_at}, Size_slice]} -> ok
             , Len_b = binary:part(Chunk, Size_slice)
             , Len = list_to_integer(binary_to_list(Len_b), 16)
-            , Data = binary:part(Chunk, {Start_at, Len})
 
-            , End_pos = Start_at + Len + 2 % Two characters for \r\n
-            , case binary:part(Chunk, {End_pos, size(Chunk) - End_pos})
-                of <<"">> -> erlang:erase(pending_data)
-                ; Remaining -> erlang:put(pending_data, Remaining)
+            , Bytes_available = size(Chunk) - Start_at
+            , Bytes_needed = Len + 2 % For the \r\n delimiting the chunk.
+            , case Bytes_available < Bytes_needed
+                of true -> ok
+                    , {incomplete, Chunk}
+                ; false -> ok
+                    , Data = binary:part(Chunk, {Start_at, Len})
+                    , End_pos = Start_at + Bytes_needed
+                    , Remaining = binary:part(Chunk, {End_pos, size(Chunk) - End_pos})
+                    , {Len, Data, Remaining}
                 end
-
-            , {Len, Data}
         end
     .
 
