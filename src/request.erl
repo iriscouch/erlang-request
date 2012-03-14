@@ -19,6 +19,8 @@
 -export([new_response/4]).
 -export([dot/2, dot/3, normal_key/1]).
 
+-define(TIMEOUT, 1 * 60 * 1000).
+
 start() -> ok
     %, ssl:start()
     %, inets:start()
@@ -75,7 +77,7 @@ request(sync, Options0) -> ok
     , Result = receive
         {Runner, Received_result} -> ok
             , Received_result
-        after 2 * 60 * 1000 -> ok
+        after ?TIMEOUT -> ok
             , {error, request_timeout}
         end
 
@@ -248,7 +250,7 @@ recv_headers(Sock, Headers0) -> ok
         ; Msg -> ok
             , io:format("Unknown message: ~p\n", [Msg])
             , {error, {http_unknown_message, Msg}}
-        after 3000 -> ok
+        after ?TIMEOUT -> ok
             , {error, header_timeout}
         end
     .
@@ -292,7 +294,7 @@ get_body(inner, Response) -> ok
         ; Msg -> ok
             , io:format("Unknown message: ~p\n", [Msg])
             , {error, {unknown_message, Msg}}
-        after 1000 -> ok
+        after ?TIMEOUT -> ok
             , {error, data_timeout}
         end
     .
