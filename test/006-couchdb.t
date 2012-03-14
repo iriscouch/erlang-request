@@ -105,7 +105,7 @@ test_changes() -> ok
 
     , Change3 = ejson:decode(Data())
     , etap:is(dot(Change3, ".doc.count"), 1, "Got first doc")
-    , Change3_at = etap_roughly(Testing_at, ?DOC_FREQ, "First change is 300ms since testing began")
+    , Change3_at = etap_roughly(Testing_at, ?DOC_FREQ, "First change is since testing began")
 
     , Hb2 = Data()
     , etap:is(Hb2, <<"\n">>, "Second heartbeat")
@@ -134,13 +134,13 @@ test_changes() -> ok
     , etap:is(Res:destroy(), ok, "Close the changes feed")
     .
 
-% Test that the elapsed time since a given timestamp is within 10ms of the estimate, or 10%, whichever is greater.
+% Test that the elapsed time since a given timestamp is within 10ms of the estimate, or 15%, whichever is greater.
 etap_roughly(Since, Estimate, Description) -> ok
     , Now = now()
     , Elapsed_ms = timer:now_diff(Now, Since) / 1000
 
-    , Ten_pc_down = Estimate * 0.9
-    , Ten_pc_up   = Estimate * 1.1
+    , Ten_pc_down = Estimate * 0.85
+    , Ten_pc_up   = Estimate * 1.15
     , Ten_ms_down = Estimate - 10
     , Ten_ms_up   = Estimate + 10
 
@@ -152,7 +152,7 @@ etap_roughly(Since, Estimate, Description) -> ok
     , Above_low_mark = Low < Elapsed_ms
     , Below_high_mark = Elapsed_ms < High
 
-    , Desc = lists:flatten(io_lib:format("~s (~w ms)", [Description, Elapsed_ms]))
+    , Desc = lists:flatten(io_lib:format("~s (~w is about ~w ms)", [Description, Elapsed_ms, Estimate]))
     , etap:ok(Above_low_mark andalso Below_high_mark, Desc)
     , Now
     .
